@@ -20,8 +20,6 @@ func main() {
 	switch *mode {
 	case "server":
 		RunServer()
-	case "client":
-		RunClient()
 	}
 }
 
@@ -46,47 +44,6 @@ func RunServer() {
 			log.Fatal("Error: ", err)
 		}
 	}
-}
-
-func RunClient() {
-	remoteAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:"+*port)
-	CheckError(err)
-
-	localAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
-	CheckError(err)
-
-	conn, err := net.DialUDP("udp", localAddr, remoteAddr)
-	CheckError(err)
-
-	defer conn.Close()
-
-	i := 1
-	for {
-		packet := CreatePacket(int32(i), "dummy message")
-		now := time.Now().Unix()
-		packet.SentTime = &now
-		data, err := proto.Marshal(packet)
-		if err != nil {
-			log.Fatal("marshalling error: ", err)
-		}
-		buf := []byte(data)
-		_, err = conn.Write(buf)
-		if err != nil {
-			log.Println(err)
-		}
-
-		i++
-		time.Sleep(time.Second * 1)
-	}
-
-}
-
-func CreatePacket(serial int32, msg string) *Packet {
-	packet := Packet{
-		Serial:  &serial,
-		Message: &msg,
-	}
-	return &packet
 }
 
 func CheckError(err error) {
