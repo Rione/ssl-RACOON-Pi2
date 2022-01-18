@@ -38,7 +38,7 @@ func RunServer() {
 	log.Println("Listening on port " + *port)
 	for {
 		n, addr, err := serverConn.ReadFromUDP(buf)
-		packet := &pb_gen.grSim_Commands{}
+		packet := &pb_gen.GrSim_Packet{}
 		err = proto.Unmarshal(buf[0:n], packet)
 		log.Printf("Received %d sent at %s from %s", *packet.Serial, time.Unix(*packet.SentTime, 0), addr)
 
