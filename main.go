@@ -37,8 +37,9 @@ func RunServer() {
 	for {
 		n, addr, err := serverConn.ReadFromUDP(buf)
 		packet := &pb_gen.GrSim_Packet{}
+		grSim_Commands := &pb_gen.GrSim_Commands{}
 		err = proto.Unmarshal(buf[0:n], packet)
-		log.Printf("Received %d sent at %s from %s", *packet.Serial, time.Unix(*packet.SentTime, 0), addr)
+		log.Printf("Received %d from %s", *packet.grSim_Commands, addr)
 
 		if err != nil {
 			log.Fatal("Error: ", err)
