@@ -4,7 +4,7 @@
 // 	protoc        v3.12.4
 // source: grSim_Commands.proto
 
-package grSim_Commands
+package github.com/Rione-SSL/RACOON-Pi/proto/grSim_Commands
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
