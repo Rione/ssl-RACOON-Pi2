@@ -38,7 +38,7 @@ func RunServer() {
 	for {
 		n, addr, err := serverConn.ReadFromUDP(buf)
 		packet := &Packet{}
-		err = pb_gen.Unmarshal(buf[0:n], packet)
+		err = pb_gen.grSim_Commands.Unmarshal(buf[0:n], packet)
 		log.Printf("Received %d sent at %s from %s", *packet.Serial, time.Unix(*packet.SentTime, 0), addr)
 
 		if err != nil {
@@ -64,7 +64,7 @@ func RunClient() {
 		packet := CreatePacket(int32(i), "dummy message")
 		now := time.Now().Unix()
 		packet.SentTime = &now
-		data, err := pb_gen.Marshal(packet)
+		data, err := pb_gen.grSim_Robotstatus.Marshal(packet)
 		if err != nil {
 			log.Fatal("marshalling error: ", err)
 		}
