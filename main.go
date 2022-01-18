@@ -6,7 +6,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"log"
 	"net"
-	"time"
 )
 
 var (
