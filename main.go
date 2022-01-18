@@ -39,7 +39,7 @@ func RunServer() {
 		packet := &pb_gen.GrSim_Packet{}
 		grSim_Commands := &pb_gen.GrSim_Commands{}
 		err = proto.Unmarshal(buf[0:n], packet)
-		log.Printf("Received %d from %s", *packet.commands, addr)
+		log.Printf("Received %d from %s", *packet.Commands, addr)
 
 		if err != nil {
 			log.Fatal("Error: ", err)
