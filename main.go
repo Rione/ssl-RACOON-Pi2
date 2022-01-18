@@ -2,9 +2,9 @@ package main
 
 import (
 	"flag"
-	"./proto/pb_gen/grSim_Commands"
-	"./proto/pb_gen/grSim_Packet"
-	"./proto/pb_gen/grSim_Robotstatus"
+	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen/grSim_Commands"
+	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen/grSim_Packet"
+	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen/grSim_Robotstatus"
 	"log"
 	"net"
 	"time"
