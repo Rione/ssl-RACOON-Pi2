@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
+	"github.com/golang/protobuf/proto"
 	"log"
 	"net"
 	"time"
@@ -37,8 +38,8 @@ func RunServer() {
 	log.Println("Listening on port " + *port)
 	for {
 		n, addr, err := serverConn.ReadFromUDP(buf)
-		packet := &Packet{}
-		err = pb_gen.Unmarshal(buf[0:n], packet)
+		packet := &pb_gen.grSim_Commands{}
+		err = proto.Unmarshal(buf[0:n], packet)
 		log.Printf("Received %d sent at %s from %s", *packet.Serial, time.Unix(*packet.SentTime, 0), addr)
 
 		if err != nil {
@@ -64,7 +65,7 @@ func RunClient() {
 		packet := CreatePacket(int32(i), "dummy message")
 		now := time.Now().Unix()
 		packet.SentTime = &now
-		data, err := pb_gen.Marshal(packet)
+		data, err := proto.Marshal(packet)
 		if err != nil {
 			log.Fatal("marshalling error: ", err)
 		}
