@@ -4,7 +4,7 @@
 // 	protoc        v3.12.4
 // source: grSim_Packet.proto
 
-package github.com/Rione-SSL/RACOON-Pi/proto/grSim_Packet
+package "github.com/Rione-SSL/RACOON-Pi/proto/grSim_Packet"
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"

@@ -4,7 +4,7 @@
 // 	protoc        v3.12.4
 // source: grSim_Robotstatus.proto
 
-package github.com/Rione-SSL/RACOON-Pi/proto/grSim_Robotstatus
+package "github.com/Rione-SSL/RACOON-Pi/proto/grSim_Robotstatus"
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
