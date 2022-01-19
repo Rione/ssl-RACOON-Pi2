@@ -39,7 +39,7 @@ func RunServer() {
 		err = proto.Unmarshal(buf[0:n], packet)
 		log.Printf("Received %d from %s", *packet.Commands, addr)
 
-		if *packet.Commands.GetRobot_commands().GetId() == 0 {
+		if *packet.Commands.GetRobotCommands().GetId() == 0 {
 			log.Printf("Robot 0 Data Received")
 		}
 		if err != nil {
