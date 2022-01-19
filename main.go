@@ -40,8 +40,8 @@ func RunServer() {
 		log.Printf("Received %d from %s", *packet.Commands, addr)
 
 		robotcmd := &pb_gen.GrSim_Commands{}
-		robotcmd = *packet.Commands.GetRobotCommands()
-		if robotcmd.GetId() == 0 {
+		*robotcmd = *packet.Commands.GetRobotCommands()
+		if *robotcmd.GetId() == 0 {
 			log.Printf("Robot 0 Data Received")
 		}
 		if err != nil {
