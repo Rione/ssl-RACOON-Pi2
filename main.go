@@ -11,7 +11,6 @@ import (
 var (
 	mode = flag.String("m", "server", "mode: client or server")
 	port = flag.String("p", "20021", "host: ip:port")
-	MyId int = 0
 )
 
 func main() {
@@ -40,7 +39,7 @@ func RunServer() {
 		err = proto.Unmarshal(buf[0:n], packet)
 		log.Printf("Received %d from %s", *packet.Commands, addr)
 
-		if *packet.Commands.robot_commands().Id() == *MyId {
+		if *packet.Commands.GetRobot_commands().GetId() == 0 {
 			log.Printf("Robot 0 Data Received")
 		}
 		if err != nil {
