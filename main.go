@@ -10,7 +10,7 @@ import (
 
 var (
 	mode = flag.String("m", "server", "mode: client or server")
-	port = flag.String("p", "20021", "host: ip:port")
+	port = flag.String("p", "20011", "host: ip:port")
 )
 
 func main() {
