@@ -40,7 +40,7 @@ func RunServer() {
 		log.Printf("Received %d from %s", *packet.Commands, addr)
 
 		robotcmd := packet.Commands.GetRobotCommands()
-		if robotcmd != 0 {
+		if robotcmd {
 			log.Printf("%s", robotcmd)
 		}
 		if err != nil {
