@@ -26,7 +26,7 @@ func RunServer() {
 	serverAddr, err := net.ResolveUDPAddr("udp", ":"+*port)
 	CheckError(err)
 
-	serverConn, err := net.ListenUDP("udp", serverAddr)
+	serverConn, err := net.ListenUDP("udp", "224.5.23.2:20011")
 	CheckError(err)
 	defer serverConn.Close()
 
