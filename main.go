@@ -23,10 +23,14 @@ func main() {
 }
 
 func RunServer() {
-	serverAddr, err := net.ResolveUDPAddr("udp", ":"+*port)
-	CheckError(err)
+	var MyId uint32 = 0
 
-	serverConn, err := net.ListenUDP("udp", "224.5.23.2:20011")
+	serverAddr := &net.UDPAddr{
+		IP:   net.ParseIP("224.5.23.2"),
+		Port: 20011,
+	}
+
+	serverConn, err := net.ListenMulticastUDP("udp", nil, serverAddr)
 	CheckError(err)
 	defer serverConn.Close()
 
@@ -37,13 +41,34 @@ func RunServer() {
 		n, addr, err := serverConn.ReadFromUDP(buf)
 		packet := &pb_gen.GrSim_Packet{}
 		err = proto.Unmarshal(buf[0:n], packet)
-		log.Printf("Received %d from %s", *packet.Commands, addr)
+		log.Printf("Data received from %s", addr)
 
 		robotcmd := packet.Commands.GetRobotCommands()
-		log.Printf("%s", robotcmd)
+
+		for _, v := range robotcmd {
+			if v.GetId() == MyId {
+				Id := v.GetId()
+				Kickspeedx := v.GetKickspeedx()
+				Kickspeedz := v.GetKickspeedz()
+				Veltangent := v.GetVeltangent()
+				Velnormal := v.GetVelnormal()
+				Velangular := v.GetVelangular()
+				Spinner := v.GetSpinner()
+				log.Printf("ID        : %d", Id)
+				log.Printf("Kickspeedx: %f", Kickspeedx)
+				log.Printf("Kickspeedz: %f", Kickspeedz)
+				log.Printf("Veltangent: %f", Veltangent)
+				log.Printf("Velnormal : %f", Velnormal)
+				log.Printf("Velangular: %f", Velangular)
+				log.Printf("Spinner   : %t", Spinner)
+
+			}
+		}
+
 		if err != nil {
 			log.Fatal("Error: ", err)
 		}
+		log.Println("======================================")
 	}
 }
 
