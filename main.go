@@ -4,14 +4,16 @@ import (
 	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
 	"go.bug.st/serial"
 	"github.com/golang/protobuf/proto"
+	"github.com/stianeikeland/go-rpio/v4"
 	"log"
 	"net"
 	"net/http"
 	"bytes"
 	"encoding/json"
-//	"encoding/binary"
 	"fmt"
 	"math"
+	"time"
+	"os"
 )
 
 type RobotStatus struct {
@@ -33,17 +35,22 @@ var robotstatus = []RobotStatus{{
 }}
 
 func main() {
+	var MyID uint32 = 1
+
 	chclient := make(chan bool)
 	chapi := make(chan bool)
+	chserver := make(chan bool)
 
-	go WebAPI(chapi)
-	go RunClient(chclient)
+	go WebAPI(chapi, MyID)
+	go RunClient(chclient, MyID)
+	go RunServer(chserver, MyID)
 
 	<-chapi
 	<-chclient
+	<-chserver
 }
 
-func WebAPI(chapi chan bool) {
+func WebAPI(chapi chan bool, MyID uint32) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		var buf bytes.Buffer
 		enc := json.NewEncoder(&buf)
@@ -65,8 +72,75 @@ func WebAPI(chapi chan bool) {
 	chapi <- true
 }
 
-func RunClient(chclient chan bool) {
-	var MyId uint32 = 0
+func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *pb_gen.Robot_Status {
+    pe := &pb_gen.Robot_Status{
+			RobotId: &robotid, Infrared: &infrared, FlatKick: &flatkick, ChipKick: &chipkick,
+		}
+		
+    return pe
+}
+
+func RunServer(chserver chan bool, MyID uint32) {
+	err := rpio.Open()
+	if err != nil {
+		os.Exit(1)
+	}
+	defer rpio.Close()
+
+	IR := rpio.Pin(18)
+
+	IR.Input()
+
+	ipv4 := "224.5.23.2"
+    port := "40000"
+    addr := ipv4 + ":" + port
+
+    fmt.Println("Sender:", addr)
+    conn, err := net.Dial("udp", addr)
+    CheckError(err)
+    defer conn.Close()
+
+    for {
+        ReadState := IR.Read()
+
+		Infrared := false
+		if ReadState == 1{
+			Infrared = true
+		}
+
+		pe := createStatus(int32(MyID), Infrared, false, false)
+		Data, _ := proto.Marshal(pe)
+
+        conn.Write([]byte(Data))
+
+		time.Sleep(16 * time.Millisecond)
+    }
+
+	chserver <- true
+}
+
+func RunClient(chclient chan bool, MyID uint32) {
+
+	DR_PIN := 12
+	
+	err := rpio.Open()
+	if err != nil {
+		os.Exit(1)
+	}
+	defer rpio.Close()
+
+	DR := rpio.Pin(DR_PIN)
+	DR.Mode(rpio.Pwm)
+	DR.Freq(50)
+	DR.DutyCycle(0, 100) // DutyCycle(これからのDuty比, 100%まで)
+
+	//ドリブラ初期化
+	log.Printf("Initializing Dribbler...")
+	DR.DutyCycle(0, 100)
+	time.Sleep(time.Second * 1)
+	DR.DutyCycle(4, 100)
+	time.Sleep(time.Second * 1)
+	log.Printf("Done.")
 
 	port, err := serial.Open("/dev/ttyS0", &serial.Mode{})
 	if err != nil{
@@ -108,7 +182,8 @@ func RunClient(chclient chan bool) {
 		robotcmd := packet.Commands.GetRobotCommands()
 
 		for _, v := range robotcmd {
-			if v.GetId() == MyId {
+			log.Println("%d", v.GetId())
+			if v.GetId() == MyID {
 				Id := v.GetId()
 				Kickspeedx := v.GetKickspeedx()
 				Kickspeedz := v.GetKickspeedz()
@@ -144,7 +219,12 @@ func RunClient(chclient chan bool) {
 
 				Veltheta = Veltheta * (180/math.Pi)
 
-				
+				if Spinner == true {
+					DR.DutyCycle(8, 100)
+				} else {
+					DR.DutyCycle(4, 100)
+				}
+
 				Motor[0] = ((math.Sin((Veltheta - 60) * (math.Pi/180)) * Velnormalized) + Velangular) * 100
 				Motor[1] = ((math.Sin((Veltheta - 135) * (math.Pi/180)) * Velnormalized) + Velangular) * 100
 				Motor[2] = ((math.Sin((Veltheta - 225) * (math.Pi/180)) * Velnormalized) + Velangular) * 100
@@ -172,7 +252,7 @@ func RunClient(chclient chan bool) {
 				} else {
 					bytearray[5] = 0 //ドリブラ情報
 				}
-				bytearray[6] = uint8(Kickspeedx) //キッカー情報
+				bytearray[6] = uint8(Kickspeedx * 10) //キッカー情報
 
 				log.Printf("Velnormalized: %f", Velnormalized)
 				log.Printf("Float64BeforeInt: %f", Motor)
