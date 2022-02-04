@@ -100,20 +100,26 @@ func RunServer(chserver chan bool, MyID uint32) {
     CheckError(err)
     defer conn.Close()
 
+	BeforeState := 0
+
     for {
         ReadState := IR.Read()
 
-		Infrared := false
-		if ReadState == 1{
-			Infrared = true
+		if ReadState != BeforeState {
+			Infrared := false
+			if ReadState == 1{
+				Infrared = true
+			}
+	
+			pe := createStatus(int32(MyID), Infrared, false, false)
+			Data, _ := proto.Marshal(pe)
+	
+			conn.Write([]byte(Data))
 		}
 
-		pe := createStatus(int32(MyID), Infrared, false, false)
-		Data, _ := proto.Marshal(pe)
+		time.Sleep(2 * time.Millisecond)
 
-        conn.Write([]byte(Data))
-
-		time.Sleep(16 * time.Millisecond)
+		BeforeState = ReadState
     }
 
 	chserver <- true
