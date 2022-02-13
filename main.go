@@ -14,6 +14,8 @@ import (
 	"math"
 	"time"
 	"os"
+	"strconv"
+	"strings"
 )
 
 type RobotStatus struct {
@@ -35,14 +37,31 @@ var robotstatus = []RobotStatus{{
 }}
 
 func main() {
-	var MyID uint32 = 1
+
+	netInterfaceAddresses, _ := net.InterfaceAddrs()
+
+	ip := "0.0.0.0"
+	for _, netInterfaceAddress := range netInterfaceAddresses {
+		networkIp, ok := netInterfaceAddress.(*net.IPNet)
+		if ok && !networkIp.IP.IsLoopback() && networkIp.IP.To4() != nil {
+			ip = networkIp.IP.String()
+		}
+	}
+	fmt.Println("Resolved Host IP: " + ip)
+	hostpart := strings.Split(ip, ".")
+	iptoid, _ := strconv.Atoi(hostpart[3])
+	iptoid = iptoid - 100
+
+	fmt.Println("Estimated Robot ID: " + strconv.Itoa(iptoid))
+
+	var MyID uint32 = uint32(iptoid)
 
 	chclient := make(chan bool)
 	chapi := make(chan bool)
 	chserver := make(chan bool)
 
 	go WebAPI(chapi, MyID)
-	go RunClient(chclient, MyID)
+	go RunClient(chclient, MyID, ip)
 	go RunServer(chserver, MyID)
 
 	<-chapi
@@ -100,7 +119,7 @@ func RunServer(chserver chan bool, MyID uint32) {
     CheckError(err)
     defer conn.Close()
 
-	BeforeState := 0
+	var BeforeState rpio.State = 0
 
     for {
         ReadState := IR.Read()
@@ -125,7 +144,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 	chserver <- true
 }
 
-func RunClient(chclient chan bool, MyID uint32) {
+func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 	DR_PIN := 12
 	
@@ -164,11 +183,11 @@ func RunClient(chclient chan bool, MyID uint32) {
 	}
 
 	serverAddr := &net.UDPAddr{
-		IP:   net.ParseIP("224.5.23.2"),
+		IP:   net.ParseIP(ip),
 		Port: 20011,
 	}
 
-	serverConn, err := net.ListenMulticastUDP("udp", nil, serverAddr)
+	serverConn, err := net.ListenUDP("udp", serverAddr)
 	CheckError(err)
 	defer serverConn.Close()
 
@@ -272,7 +291,6 @@ func RunClient(chclient chan bool, MyID uint32) {
 				log.Printf("Sent %v bytes\n", n) //何バイト送信した？
 			}
 		}
-		
 		log.Println("======================================")
 	}
 
