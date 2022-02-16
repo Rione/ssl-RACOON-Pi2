@@ -1,39 +1,40 @@
 package main
 
 import (
-	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
-	"go.bug.st/serial"
-	"github.com/golang/protobuf/proto"
-	"github.com/stianeikeland/go-rpio/v4"
-	"log"
-	"net"
-	"net/http"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
-	"time"
+	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
+	"github.com/golang/protobuf/proto"
+	"github.com/stianeikeland/go-rpio/v4"
+	"go.bug.st/serial"
 )
 
 type RobotStatus struct {
-	ID			int			`json:"id"`
-	Battery		float32		`json:"battery"`
-	Wireless	float32		`json:"wireless"`
-	Health		string		`json:"health"`
-	IsError		bool		`json:"is_error"`
-	Code		int32		`json:"code"`
+	ID       int     `json:"id"`
+	Battery  float32 `json:"battery"`
+	Wireless float32 `json:"wireless"`
+	Health   string  `json:"health"`
+	IsError  bool    `json:"is_error"`
+	Code     int32   `json:"code"`
 }
 
 var robotstatus = []RobotStatus{{
-	ID:			0,
-	Battery:	12.15,
-	Wireless:	66.0,
-	Health:		"Good",
-	IsError:	true,
-	Code:		32,
+	ID:       0,
+	Battery:  12.15,
+	Wireless: 66.0,
+	Health:   "Good",
+	IsError:  true,
+	Code:     32,
 }}
 
 func main() {
@@ -92,11 +93,11 @@ func WebAPI(chapi chan bool, MyID uint32) {
 }
 
 func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *pb_gen.Robot_Status {
-    pe := &pb_gen.Robot_Status{
-			RobotId: &robotid, Infrared: &infrared, FlatKick: &flatkick, ChipKick: &chipkick,
-		}
-		
-    return pe
+	pe := &pb_gen.Robot_Status{
+		RobotId: &robotid, Infrared: &infrared, FlatKick: &flatkick, ChipKick: &chipkick,
+	}
+
+	return pe
 }
 
 func RunServer(chserver chan bool, MyID uint32) {
@@ -111,35 +112,35 @@ func RunServer(chserver chan bool, MyID uint32) {
 	IR.Input()
 
 	ipv4 := "224.5.23.2"
-    port := "40000"
-    addr := ipv4 + ":" + port
+	port := "40000"
+	addr := ipv4 + ":" + port
 
-    fmt.Println("Sender:", addr)
-    conn, err := net.Dial("udp", addr)
-    CheckError(err)
-    defer conn.Close()
+	fmt.Println("Sender:", addr)
+	conn, err := net.Dial("udp", addr)
+	CheckError(err)
+	defer conn.Close()
 
 	var BeforeState rpio.State = 0
 
-    for {
-        ReadState := IR.Read()
+	for {
+		ReadState := IR.Read()
 
 		if ReadState != BeforeState {
 			Infrared := false
-			if ReadState == 1{
+			if ReadState == 1 {
 				Infrared = true
 			}
-	
+
 			pe := createStatus(int32(MyID), Infrared, false, false)
 			Data, _ := proto.Marshal(pe)
-	
+
 			conn.Write([]byte(Data))
 		}
 
 		time.Sleep(2 * time.Millisecond)
 
 		BeforeState = ReadState
-    }
+	}
 
 	chserver <- true
 }
@@ -147,7 +148,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 	DR_PIN := 12
-	
+
 	err := rpio.Open()
 	if err != nil {
 		os.Exit(1)
@@ -168,12 +169,12 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 	log.Printf("Done.")
 
 	port, err := serial.Open("/dev/ttyS0", &serial.Mode{})
-	if err != nil{
+	if err != nil {
 		log.Fatal(err)
 	}
 	mode := &serial.Mode{
 		BaudRate: 115200,
-		Parity: serial.NoParity,
+		Parity:   serial.NoParity,
 		DataBits: 8,
 		StopBits: serial.OneStopBit,
 	}
@@ -207,7 +208,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 		robotcmd := packet.Commands.GetRobotCommands()
 
 		for _, v := range robotcmd {
-			log.Println("%d", v.GetId())
+			log.Println("%d", int(v.GetId()))
 			if v.GetId() == MyID {
 				Id := v.GetId()
 				Kickspeedx := v.GetKickspeedx()
@@ -221,12 +222,12 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				log.Printf("Kickspeedz: %f", Kickspeedz)
 				log.Printf("Veltangent: %f", Veltangent)
 				log.Printf("Velnormal : %f", Velnormal)
-				
+
 				log.Printf("Velangular: %f", Velangular)
 				log.Printf("Spinner   : %t", Spinner)
-				
+
 				bytearray := make([]byte, 7) //7バイト領域を確保
-				Motor := make([]float64, 4) //モータ信号用 Float64
+				Motor := make([]float64, 4)  //モータ信号用 Float64
 
 				var Velnormalized float64 = math.Sqrt(math.Pow(Veltangent, 2) + math.Pow(Velnormal, 2))
 
@@ -236,27 +237,34 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					Velnormalized = 0.0
 				}
 
-				Veltheta := math.Atan2(Veltangent, -Velnormal) - (math.Pi/2)
+				Veltheta := math.Atan2(Veltangent, -Velnormal) - (math.Pi / 2)
 
 				if Veltheta < 0 {
-					Veltheta = Veltheta + 2.0 * math.Pi
+					Veltheta = Veltheta + 2.0*math.Pi
 				}
 
-				Veltheta = Veltheta * (180/math.Pi)
+				Veltheta = Veltheta * (180 / math.Pi)
 
-				if Spinner == true {
+				if Spinner {
 					DR.DutyCycle(8, 100)
 				} else {
 					DR.DutyCycle(4, 100)
 				}
 
-				Motor[0] = ((math.Sin((Veltheta - 60) * (math.Pi/180)) * Velnormalized) + Velangular) * 100
-				Motor[1] = ((math.Sin((Veltheta - 135) * (math.Pi/180)) * Velnormalized) + Velangular) * 100
-				Motor[2] = ((math.Sin((Veltheta - 225) * (math.Pi/180)) * Velnormalized) + Velangular) * 100
-				Motor[3] = ((math.Sin((Veltheta - 300) * (math.Pi/180)) * Velnormalized) + Velangular) * 100
+				if v.GetWheelsspeed() {
+					Motor[0] = float64(v.GetWheel1())
+					Motor[1] = float64(v.GetWheel2())
+					Motor[2] = float64(v.GetWheel3())
+					Motor[3] = float64(v.GetWheel4())
+				} else {
+					Motor[0] = ((math.Sin((Veltheta-60)*(math.Pi/180)) * Velnormalized) + Velangular) * 100
+					Motor[1] = ((math.Sin((Veltheta-135)*(math.Pi/180)) * Velnormalized) + Velangular) * 100
+					Motor[2] = ((math.Sin((Veltheta-225)*(math.Pi/180)) * Velnormalized) + Velangular) * 100
+					Motor[3] = ((math.Sin((Veltheta-300)*(math.Pi/180)) * Velnormalized) + Velangular) * 100
+				}
 
 				for i := 0; i < 4; i++ {
-					
+
 					if Motor[i] > 100 {
 						Motor[i] = 100
 					} else if Motor[i] < -100 {
@@ -266,13 +274,12 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					Motor[i] = Motor[i] + 100
 				}
 
-				
-				bytearray[0] = 0xFF	//プリアンブル
+				bytearray[0] = 0xFF //プリアンブル
 				for i := 0; i < 4; i++ {
 					bytearray[i+1] = uint8(Motor[i]) // 1-4番のモータへの信号データ
 				}
 
-				if Spinner == true{
+				if Spinner == true {
 					bytearray[5] = 1 //ドリブラ情報
 				} else {
 					bytearray[5] = 0 //ドリブラ情報
@@ -282,7 +289,6 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				log.Printf("Velnormalized: %f", Velnormalized)
 				log.Printf("Float64BeforeInt: %f", Motor)
 				log.Printf("Bytes: %b", bytearray)
-
 
 				n, err := port.Write(bytearray) //書き込み
 				if err != nil {
