@@ -208,7 +208,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 		robotcmd := packet.Commands.GetRobotCommands()
 
 		for _, v := range robotcmd {
-			log.Println("%d", int(v.GetId()))
+			log.Printf("%d\n", int(v.GetId()))
 			if v.GetId() == MyID {
 				Id := v.GetId()
 				Kickspeedx := v.GetKickspeedx()
