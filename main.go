@@ -2,20 +2,19 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
 	"github.com/golang/protobuf/proto"
-	"github.com/stianeikeland/go-rpio/v4"
 	"go.bug.st/serial"
 )
 
@@ -36,6 +35,74 @@ var robotstatus = []RobotStatus{{
 	IsError:  true,
 	Code:     32,
 }}
+
+var sendarray bytes.Buffer //送信用バッファ
+
+type RecvStruct struct {
+	volt        int8
+	photoSensor int16
+	isHoldBall  bool
+	imuDir      int16
+}
+
+type SendStruct struct {
+	preamble     byte
+	motor        [4]uint8
+	dribblePower uint8
+	kickPower    uint8
+	chipPower    uint8
+	emg          bool
+}
+
+var recvdata RecvStruct
+
+func RunSerial(chclient chan bool, MyID uint32) {
+	port, err := serial.Open("/dev/serial0", &serial.Mode{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	mode := &serial.Mode{
+		BaudRate: 115200,
+		Parity:   serial.NoParity,
+		DataBits: 8,
+		StopBits: serial.OneStopBit,
+	}
+
+	if err := port.SetMode(mode); err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		n, err := port.Write(sendarray.Bytes()) //書き込み
+		log.Printf("Sent %v bytes\n", n)        //何バイト送信した？
+		CheckError(err)
+		buf := make([]byte, 1)
+		recvbuf := make([]byte, 6)
+		for {
+			port.Read(buf) //読み込み
+			if bytes.Equal(buf, []byte{0xFF}) {
+				port.Read(buf) //読み込み
+				if bytes.Equal(buf, []byte{0x00}) {
+					port.Read(buf) //読み込み
+					if bytes.Equal(buf, []byte{0xFF}) {
+						port.Read(buf) //読み込み
+						if bytes.Equal(buf, []byte{0x00}) {
+							for i := 0; i < 6; i++ {
+								port.Read(buf)                    //読み込み
+								recvbuf = append(recvbuf, buf...) //受信データを格納
+							}
+							break
+						}
+					}
+				}
+			}
+		}
+		recvdata := RecvStruct{}
+		//構造体に変換
+		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
+		CheckError(err)
+	}
+}
 
 func main() {
 
@@ -60,14 +127,17 @@ func main() {
 	chclient := make(chan bool)
 	chapi := make(chan bool)
 	chserver := make(chan bool)
+	chserial := make(chan bool)
 
 	go WebAPI(chapi, MyID)
 	go RunClient(chclient, MyID, ip)
 	go RunServer(chserver, MyID)
+	go RunSerial(chserial, MyID)
 
 	<-chapi
 	<-chclient
 	<-chserver
+	<-chserial
 }
 
 func WebAPI(chapi chan bool, MyID uint32) {
@@ -101,16 +171,6 @@ func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *p
 }
 
 func RunServer(chserver chan bool, MyID uint32) {
-	err := rpio.Open()
-	if err != nil {
-		os.Exit(1)
-	}
-	defer rpio.Close()
-
-	IR := rpio.Pin(18)
-
-	IR.Input()
-
 	ipv4 := "224.5.23.2"
 	port := "40000"
 	addr := ipv4 + ":" + port
@@ -120,68 +180,18 @@ func RunServer(chserver chan bool, MyID uint32) {
 	CheckError(err)
 	defer conn.Close()
 
-	var BeforeState rpio.State = 0
-
 	for {
-		ReadState := IR.Read()
+		pe := createStatus(int32(MyID), recvdata.isHoldBall, false, false)
+		Data, _ := proto.Marshal(pe)
 
-		if ReadState != BeforeState {
-			Infrared := false
-			if ReadState == 1 {
-				Infrared = true
-			}
-
-			pe := createStatus(int32(MyID), Infrared, false, false)
-			Data, _ := proto.Marshal(pe)
-
-			conn.Write([]byte(Data))
-		}
+		conn.Write([]byte(Data))
 
 		time.Sleep(2 * time.Millisecond)
-
-		BeforeState = ReadState
 	}
 
-	chserver <- true
 }
 
 func RunClient(chclient chan bool, MyID uint32, ip string) {
-
-	DR_PIN := 12
-
-	err := rpio.Open()
-	if err != nil {
-		os.Exit(1)
-	}
-	defer rpio.Close()
-
-	DR := rpio.Pin(DR_PIN)
-	DR.Mode(rpio.Pwm)
-	DR.Freq(50)
-	DR.DutyCycle(0, 100) // DutyCycle(これからのDuty比, 100%まで)
-
-	//ドリブラ初期化
-	log.Printf("Initializing Dribbler...")
-	DR.DutyCycle(0, 100)
-	time.Sleep(time.Second * 1)
-	DR.DutyCycle(4, 100)
-	time.Sleep(time.Second * 1)
-	log.Printf("Done.")
-
-	port, err := serial.Open("/dev/ttyS0", &serial.Mode{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	mode := &serial.Mode{
-		BaudRate: 115200,
-		Parity:   serial.NoParity,
-		DataBits: 8,
-		StopBits: serial.OneStopBit,
-	}
-
-	if err := port.SetMode(mode); err != nil {
-		log.Fatal(err)
-	}
 
 	serverAddr := &net.UDPAddr{
 		IP:   net.ParseIP(ip),
@@ -195,7 +205,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 	buf := make([]byte, 1024)
 
 	for {
-		n, addr, err := serverConn.ReadFromUDP(buf)
+		n, addr, _ := serverConn.ReadFromUDP(buf)
 		packet := &pb_gen.GrSim_Packet{}
 		err = proto.Unmarshal(buf[0:n], packet)
 
@@ -226,8 +236,8 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				log.Printf("Velangular: %f", Velangular)
 				log.Printf("Spinner   : %t", Spinner)
 
-				bytearray := make([]byte, 7) //7バイト領域を確保
-				Motor := make([]float64, 4)  //モータ信号用 Float64
+				bytearray := SendStruct{}   //送信用構造体
+				Motor := make([]float64, 4) //モータ信号用 Float64
 
 				var Velnormalized float64 = math.Sqrt(math.Pow(Veltangent, 2) + math.Pow(Velnormal, 2))
 
@@ -244,12 +254,6 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				}
 
 				Veltheta = Veltheta * (180 / math.Pi)
-
-				if Spinner {
-					DR.DutyCycle(8, 100)
-				} else {
-					DR.DutyCycle(4, 100)
-				}
 
 				if v.GetWheelsspeed() {
 					Motor[0] = float64(v.GetWheel1())
@@ -274,33 +278,32 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					Motor[i] = Motor[i] + 100
 				}
 
-				bytearray[0] = 0xFF //プリアンブル
+				bytearray.preamble = 0xFF //プリアンブル
 				for i := 0; i < 4; i++ {
-					bytearray[i+1] = uint8(Motor[i]) // 1-4番のモータへの信号データ
+					bytearray.motor[i] = uint8(Motor[i]) // 1-4番のモータへの信号データ
 				}
 
-				if Spinner == true {
-					bytearray[5] = 1 //ドリブラ情報
+				if Spinner {
+					bytearray.dribblePower = 100 //ドリブラ情報
 				} else {
-					bytearray[5] = 0 //ドリブラ情報
+					bytearray.dribblePower = 0 //ドリブラ情報
 				}
-				bytearray[6] = uint8(Kickspeedx * 10) //キッカー情報
+				bytearray.kickPower = uint8(Kickspeedx * 10) //キッカー情報
+				bytearray.chipPower = uint8(Kickspeedz * 10) //チップ情報
+				bytearray.emg = false                        //EMG情報
 
 				log.Printf("Velnormalized: %f", Velnormalized)
 				log.Printf("Float64BeforeInt: %f", Motor)
-				log.Printf("Bytes: %b", bytearray)
 
-				n, err := port.Write(bytearray) //書き込み
+				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
 				if err != nil {
 					log.Fatal(err)
 				}
-				log.Printf("Sent %v bytes\n", n) //何バイト送信した？
 			}
 		}
 		log.Println("======================================")
 	}
 
-	chclient <- true
 }
 
 func CheckError(err error) {
