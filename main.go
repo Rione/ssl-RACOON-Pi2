@@ -39,10 +39,10 @@ var robotstatus = []RobotStatus{{
 var sendarray bytes.Buffer //送信用バッファ
 
 type RecvStruct struct {
-	volt        int8
-	photoSensor int16
-	isHoldBall  bool
-	imuDir      int16
+	Volt        int8
+	PhotoSensor int16
+	IsHoldBall  bool
+	ImuDir      int16
 }
 
 type SendStruct struct {
@@ -88,8 +88,8 @@ func RunSerial(chclient chan bool, MyID uint32) {
 						port.Read(buf) //読み込み
 						if bytes.Equal(buf, []byte{0x00}) {
 							for i := 0; i < 6; i++ {
-								port.Read(buf)                    //読み込み
-								recvbuf = append(recvbuf, buf...) //受信データを格納
+								port.Read(buf)      //読み込み
+								recvbuf[i] = buf[0] //受信データを格納
 							}
 							break
 						}
@@ -99,6 +99,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		}
 		recvdata := RecvStruct{}
 		//構造体に変換
+		log.Println(recvbuf)
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
 	}
@@ -181,7 +182,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 	defer conn.Close()
 
 	for {
-		pe := createStatus(int32(MyID), recvdata.isHoldBall, false, false)
+		pe := createStatus(int32(MyID), recvdata.IsHoldBall, false, false)
 		Data, _ := proto.Marshal(pe)
 
 		conn.Write([]byte(Data))
@@ -294,7 +295,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 				log.Printf("Velnormalized: %f", Velnormalized)
 				log.Printf("Float64BeforeInt: %f", Motor)
-
+				sendarray = bytes.Buffer{}
 				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
 				if err != nil {
 					log.Fatal(err)
