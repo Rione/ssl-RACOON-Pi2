@@ -82,7 +82,8 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		// 	log.Println(sendarray.Bytes()[i : i+1])
 		// 	time.Sleep(1000 * time.Nanosecond)
 		// }
-		n, _ := port.Write(sendarray.Bytes()) //書き込み
+		sendbytes := sendarray.Bytes()
+		n, _ := port.Write(sendbytes) //書き込み
 		time.Sleep(16 * time.Millisecond)
 		log.Printf("Sent %v bytes\n", n) //何バイト送信した？
 		log.Println(sendarray.Bytes())
@@ -90,6 +91,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		//time.Sleep(1000 * time.Nanosecond)
 		buf := make([]byte, 1)
 		recvbuf := make([]byte, 6)
+		port.ResetInputBuffer()
 		for {
 			port.Read(buf) //読み込み
 			if bytes.Equal(buf, []byte{0xFF}) {
@@ -114,7 +116,28 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		log.Println(recvbuf)
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
-		time.Sleep(1 * time.Millisecond)
+		time.Sleep(100 * time.Nanosecond)
+	}
+}
+
+var kicker_enable bool = false
+var kicker_val uint8 = 0
+var chip_enable bool = false
+var chip_val uint8 = 0
+
+func kickCheck(chkicker chan bool) {
+	for {
+		if kicker_enable {
+			time.Sleep(500 * time.Millisecond)
+			kicker_enable = false
+			kicker_val = 0
+		}
+		if chip_enable {
+			time.Sleep(500 * time.Millisecond)
+			chip_enable = false
+			chip_val = 0
+		}
+		time.Sleep(16 * time.Millisecond)
 	}
 }
 
@@ -142,16 +165,19 @@ func main() {
 	chapi := make(chan bool)
 	chserver := make(chan bool)
 	chserial := make(chan bool)
+	chkick := make(chan bool)
 
 	go WebAPI(chapi, MyID)
 	go RunClient(chclient, MyID, ip)
 	go RunServer(chserver, MyID)
 	go RunSerial(chserial, MyID)
+	go kickCheck(chkick)
 
 	<-chapi
 	<-chclient
 	<-chserver
 	<-chserial
+	<-chkick
 }
 
 func WebAPI(chapi chan bool, MyID uint32) {
@@ -249,7 +275,6 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 				log.Printf("Velangular: %f", Velangular)
 				log.Printf("Spinner   : %t", Spinner)
-
 				bytearray := SendStruct{}   //送信用構造体
 				Motor := make([]float64, 4) //モータ信号用 Float64
 
@@ -304,8 +329,25 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				} else {
 					bytearray.dribblePower = 0 //ドリブラ情報
 				}
-				bytearray.kickPower = uint8(Kickspeedx * 10) //キッカー情報
-				bytearray.chipPower = uint8(Kickspeedz * 10) //チップ情報
+
+				if Kickspeedx > 0 {
+					kicker_val = uint8(Kickspeedx * 10)
+					kicker_enable = true
+				}
+				if kicker_enable {
+					bytearray.kickPower = kicker_val //キッカー情報
+				} else {
+					bytearray.kickPower = 0 //キッカー情報
+				}
+				if Kickspeedz > 0 {
+					chip_val = uint8(Kickspeedz * 10)
+					chip_enable = true
+				}
+				if chip_enable {
+					bytearray.chipPower = chip_val //チップ情報
+				} else {
+					bytearray.chipPower = 0 //チップ情報
+				}
 
 				// Velangular radian to degree
 				Velangular_deg := Velangular * (180 / math.Pi)
@@ -326,6 +368,20 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				log.Printf("Float64BeforeInt: %f", Motor)
 				sendarray = bytes.Buffer{}
 				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
+
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			if v.GetId() == 255 {
+				bytearray := SendStruct{} //送信用構造体
+				bytearray.emg = true      // 非常用モード
+				bytearray.preamble = 0xFF //プリアンブル
+
+				sendarray = bytes.Buffer{}
+				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
+
 				if err != nil {
 					log.Fatal(err)
 				}
