@@ -51,6 +51,8 @@ type SendStruct struct {
 	dribblePower uint8
 	kickPower    uint8
 	chipPower    uint8
+	imuDir       uint8
+	imuFlg       bool
 	emg          bool
 }
 
@@ -62,7 +64,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		log.Fatal(err)
 	}
 	mode := &serial.Mode{
-		BaudRate: 115200,
+		BaudRate: 9600,
 		Parity:   serial.NoParity,
 		DataBits: 8,
 		StopBits: serial.OneStopBit,
@@ -73,9 +75,19 @@ func RunSerial(chclient chan bool, MyID uint32) {
 	}
 
 	for {
-		n, err := port.Write(sendarray.Bytes()) //書き込み
-		log.Printf("Sent %v bytes\n", n)        //何バイト送信した？
-		CheckError(err)
+
+		//if sendarray has capacity
+		// for i := 0; i < sendarray.Len(); i++ {
+		// 	port.Write(sendarray.Bytes()[i : i+1])
+		// 	log.Println(sendarray.Bytes()[i : i+1])
+		// 	time.Sleep(1000 * time.Nanosecond)
+		// }
+		n, _ := port.Write(sendarray.Bytes()) //書き込み
+		time.Sleep(16 * time.Millisecond)
+		log.Printf("Sent %v bytes\n", n) //何バイト送信した？
+		log.Println(sendarray.Bytes())
+
+		//time.Sleep(1000 * time.Nanosecond)
 		buf := make([]byte, 1)
 		recvbuf := make([]byte, 6)
 		for {
@@ -102,6 +114,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		log.Println(recvbuf)
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 
@@ -187,7 +200,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 
 		conn.Write([]byte(Data))
 
-		time.Sleep(2 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 
 }
@@ -262,12 +275,13 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					Motor[2] = float64(v.GetWheel3())
 					Motor[3] = float64(v.GetWheel4())
 				} else {
-					Motor[0] = ((math.Sin((Veltheta-60)*(math.Pi/180)) * Velnormalized) + Velangular) * 100
-					Motor[1] = ((math.Sin((Veltheta-135)*(math.Pi/180)) * Velnormalized) + Velangular) * 100
-					Motor[2] = ((math.Sin((Veltheta-225)*(math.Pi/180)) * Velnormalized) + Velangular) * 100
-					Motor[3] = ((math.Sin((Veltheta-300)*(math.Pi/180)) * Velnormalized) + Velangular) * 100
+					Motor[0] = (math.Sin((Veltheta-60)*(math.Pi/180)) * Velnormalized) * 100
+					Motor[1] = (math.Sin((Veltheta-135)*(math.Pi/180)) * Velnormalized) * 100
+					Motor[2] = (math.Sin((Veltheta-225)*(math.Pi/180)) * Velnormalized) * 100
+					Motor[3] = (math.Sin((Veltheta-300)*(math.Pi/180)) * Velnormalized) * 100
 				}
 
+				//Limit Motor Value
 				for i := 0; i < 4; i++ {
 
 					if Motor[i] > 100 {
@@ -276,6 +290,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 						Motor[i] = -100
 					}
 
+					//Plus 100 for uint8
 					Motor[i] = Motor[i] + 100
 				}
 
@@ -291,7 +306,21 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				}
 				bytearray.kickPower = uint8(Kickspeedx * 10) //キッカー情報
 				bytearray.chipPower = uint8(Kickspeedz * 10) //チップ情報
-				bytearray.emg = false                        //EMG情報
+
+				// Velangular radian to degree
+				Velangular_deg := Velangular * (180 / math.Pi)
+				//100 times of Velangular_deg (ex. -90 degree -> -90.0 * 100 = -9000.0)
+				//Velangular_deg = Velangular_deg * 100
+
+				//Velangular_deg is negative
+				if Velangular_deg < 0 {
+					Velangular_deg = Velangular_deg * -1
+					bytearray.imuFlg = true
+				} else {
+					bytearray.imuFlg = false
+				}
+				bytearray.imuDir = uint8(Velangular_deg) //IMU情報
+				bytearray.emg = false                    //EMG情報
 
 				log.Printf("Velnormalized: %f", Velnormalized)
 				log.Printf("Float64BeforeInt: %f", Motor)
