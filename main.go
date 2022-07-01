@@ -14,9 +14,12 @@ import (
 	"time"
 
 	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
-	"github.com/golang/protobuf/proto"
 	"go.bug.st/serial"
+	"google.golang.org/protobuf/proto"
 )
+
+const BAUDRATE int = 9600
+const SERIAL_PORT_NAME string = "/dev/serial0"
 
 type RobotStatus struct {
 	ID       int     `json:"id"`
@@ -59,12 +62,14 @@ type SendStruct struct {
 var recvdata RecvStruct
 
 func RunSerial(chclient chan bool, MyID uint32) {
-	port, err := serial.Open("/dev/serial0", &serial.Mode{})
+	port, err := serial.Open(SERIAL_PORT_NAME, &serial.Mode{})
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	//シリアル通信のモードをセット
 	mode := &serial.Mode{
-		BaudRate: 9600,
+		BaudRate: BAUDRATE,
 		Parity:   serial.NoParity,
 		DataBits: 8,
 		StopBits: serial.OneStopBit,
@@ -76,19 +81,11 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 	for {
 
-		//if sendarray has capacity
-		// for i := 0; i < sendarray.Len(); i++ {
-		// 	port.Write(sendarray.Bytes()[i : i+1])
-		// 	log.Println(sendarray.Bytes()[i : i+1])
-		// 	time.Sleep(1000 * time.Nanosecond)
-		// }
-		sendbytes := sendarray.Bytes()
-		n, _ := port.Write(sendbytes) //書き込み
-		time.Sleep(16 * time.Millisecond)
-		log.Printf("Sent %v bytes\n", n) //何バイト送信した？
-		log.Println(sendarray.Bytes())
+		n, _ := port.Write(sendarray.Bytes()) //書き込み
+		time.Sleep(16 * time.Millisecond)     //少し待つ
+		log.Printf("Sent %v bytes\n", n)      //何バイト送信した？
+		log.Println(sendarray.Bytes())        //送信済みのバイトを表示
 
-		//time.Sleep(1000 * time.Nanosecond)
 		buf := make([]byte, 1)
 		recvbuf := make([]byte, 6)
 		port.ResetInputBuffer()
@@ -111,32 +108,43 @@ func RunSerial(chclient chan bool, MyID uint32) {
 				}
 			}
 		}
+
 		recvdata := RecvStruct{}
-		//構造体に変換
-		log.Println(recvbuf)
+		//バイナリから構造体に変換
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
+		log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt*10.0), recvdata.IsHoldBall, recvdata.ImuDir)
+		//100ナノ秒待つ
 		time.Sleep(100 * time.Nanosecond)
 	}
 }
 
-var kicker_enable bool = false
-var kicker_val uint8 = 0
-var chip_enable bool = false
-var chip_val uint8 = 0
+var kicker_enable bool = false //キッカーの入力のON OFFを定義する
+var kicker_val uint8 = 0       //キッカーの値
+var chip_enable bool = false   //チップキックの入力のON OFFを定義する
+var chip_val uint8 = 0         //チップキックの値
 
+//キッカーパワーが入力された時に、値を固定する関数
+//並列での処理が行われる
 func kickCheck(chkicker chan bool) {
 	for {
+		//ストレートキックが入力されたとき
 		if kicker_enable {
+			//500ミリ秒待つ
 			time.Sleep(500 * time.Millisecond)
+			//ストレートキックをオフにし、値を0にする
 			kicker_enable = false
 			kicker_val = 0
 		}
+		//チップキックが入力されたとき
 		if chip_enable {
+			//500ミリ秒待つ
 			time.Sleep(500 * time.Millisecond)
+			//チップキックをオフにし、値を0にする
 			chip_enable = false
 			chip_val = 0
 		}
+		//ループを行うため、少し待機する
 		time.Sleep(16 * time.Millisecond)
 	}
 }
@@ -152,13 +160,19 @@ func main() {
 			ip = networkIp.IP.String()
 		}
 	}
+	//IPアドレスを表示
 	fmt.Println("Resolved Host IP: " + ip)
+	//IPアドレスの各数字部分を分解
+	//例: 192.168.100.101 の場合、 192 が[0]、168 が[1]、100 が[2]、101 が[3]
 	hostpart := strings.Split(ip, ".")
+	//上記例の[3]なので、101の部分を取得
 	iptoid, _ := strconv.Atoi(hostpart[3])
+	// 100を引いてロボットIDを決定
 	iptoid = iptoid - 100
-
+	//上記推測の結果を表示
 	fmt.Println("Estimated Robot ID: " + strconv.Itoa(iptoid))
 
+	//MyIDで指定したロボットIDを取得
 	var MyID uint32 = uint32(iptoid)
 
 	chclient := make(chan bool)
@@ -167,6 +181,7 @@ func main() {
 	chserial := make(chan bool)
 	chkick := make(chan bool)
 
+	//各並列処理部分
 	go WebAPI(chapi, MyID)
 	go RunClient(chclient, MyID, ip)
 	go RunServer(chserver, MyID)
@@ -181,6 +196,7 @@ func main() {
 }
 
 func WebAPI(chapi chan bool, MyID uint32) {
+	//WebAPIを起動
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		var buf bytes.Buffer
 		enc := json.NewEncoder(&buf)
@@ -197,12 +213,14 @@ func WebAPI(chapi chan bool, MyID uint32) {
 
 	// GET /robotstatus
 	http.HandleFunc("/robotstatus", handler)
+	//ポート 8080番でサーバを立ち上げる
 	log.Fatal(http.ListenAndServe(":8080", nil))
 
 	chapi <- true
 }
 
 func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *pb_gen.Robot_Status {
+	//grSimとの互換性を確保するために用意。
 	pe := &pb_gen.Robot_Status{
 		RobotId: &robotid, Infrared: &infrared, FlatKick: &flatkick, ChipKick: &chipkick,
 	}
@@ -210,6 +228,7 @@ func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *p
 	return pe
 }
 
+//RACOON-MWにボールセンサ等の情報を送信するためのサーバ
 func RunServer(chserver chan bool, MyID uint32) {
 	ipv4 := "224.5.23.2"
 	port := "40000"
@@ -231,6 +250,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 
 }
 
+//AIからの情報を受信するクライアント
 func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 	serverAddr := &net.UDPAddr{
@@ -351,10 +371,8 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 				// Velangular radian to degree
 				Velangular_deg := Velangular * (180 / math.Pi)
-				//100 times of Velangular_deg (ex. -90 degree -> -90.0 * 100 = -9000.0)
-				//Velangular_deg = Velangular_deg * 100
 
-				//Velangular_deg is negative
+				//Velangular_deg がマイナス値のときは、マイナスであるという情報を付加(imuFlag)
 				if Velangular_deg < 0 {
 					Velangular_deg = Velangular_deg * -1
 					bytearray.imuFlg = true
@@ -364,8 +382,8 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				bytearray.imuDir = uint8(Velangular_deg) //IMU情報
 				bytearray.emg = false                    //EMG情報
 
-				log.Printf("Velnormalized: %f", Velnormalized)
-				log.Printf("Float64BeforeInt: %f", Motor)
+				//log.Printf("Velnormalized: %f", Velnormalized)
+				//log.Printf("Float64BeforeInt: %f", Motor)
 				sendarray = bytes.Buffer{}
 				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
 
@@ -374,6 +392,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				}
 			}
 
+			//IDが255のときは、モーター動作させず緊急停止フェーズに移行
 			if v.GetId() == 255 {
 				bytearray := SendStruct{} //送信用構造体
 				bytearray.emg = true      // 非常用モード
@@ -382,12 +401,15 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				sendarray = bytes.Buffer{}
 				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
 
+				log.Println("EMERGANCY STOP MODE ACTIVATED")
+
 				if err != nil {
 					log.Fatal(err)
 				}
 			}
 		}
 		log.Println("======================================")
+		fmt.Print("\033[H\033[2J")
 	}
 
 }
