@@ -3,17 +3,16 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
 	"net"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
+	"github.com/stianeikeland/go-rpio/v4"
 	"go.bug.st/serial"
 	"google.golang.org/protobuf/proto"
 )
@@ -21,29 +20,11 @@ import (
 const BAUDRATE int = 9600
 const SERIAL_PORT_NAME string = "/dev/serial0"
 
-type RobotStatus struct {
-	ID       int     `json:"id"`
-	Battery  float32 `json:"battery"`
-	Wireless float32 `json:"wireless"`
-	Health   string  `json:"health"`
-	IsError  bool    `json:"is_error"`
-	Code     int32   `json:"code"`
-}
-
-var robotstatus = []RobotStatus{{
-	ID:       0,
-	Battery:  12.15,
-	Wireless: 66.0,
-	Health:   "Good",
-	IsError:  true,
-	Code:     32,
-}}
-
 var sendarray bytes.Buffer //送信用バッファ
 
 type RecvStruct struct {
-	Volt        int8
-	PhotoSensor int16
+	Volt        uint8
+	PhotoSensor uint16
 	IsHoldBall  bool
 	ImuDir      int16
 }
@@ -55,17 +36,21 @@ type SendStruct struct {
 	kickPower    uint8
 	chipPower    uint8
 	imuDir       uint8
-	imuFlg       bool
+	imuFlg       uint8
 	emg          bool
 }
 
 var recvdata RecvStruct
+var imudegree int16
+var imuError bool = false
 
 func RunSerial(chclient chan bool, MyID uint32) {
 	port, err := serial.Open(SERIAL_PORT_NAME, &serial.Mode{})
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	recvdata = RecvStruct{}
 
 	//シリアル通信のモードをセット
 	mode := &serial.Mode{
@@ -80,11 +65,6 @@ func RunSerial(chclient chan bool, MyID uint32) {
 	}
 
 	for {
-
-		n, _ := port.Write(sendarray.Bytes()) //書き込み
-		time.Sleep(16 * time.Millisecond)     //少し待つ
-		log.Printf("Sent %v bytes\n", n)      //何バイト送信した？
-		log.Println(sendarray.Bytes())        //送信済みのバイトを表示
 
 		buf := make([]byte, 1)
 		recvbuf := make([]byte, 6)
@@ -109,13 +89,73 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			}
 		}
 
-		recvdata := RecvStruct{}
 		//バイナリから構造体に変換
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
-		log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt*10.0), recvdata.IsHoldBall, recvdata.ImuDir)
+		sendbytes := sendarray.Bytes()
+
+		log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
 		//100ナノ秒待つ
+		if len(sendbytes) > 0 {
+			if math.Abs(math.Abs(float64(imudegree))-math.Abs(float64(recvdata.ImuDir))) > 35.0 {
+				imuError = true
+			}
+		}
+		if imuError && len(sendbytes) > 0 {
+			sendbytes[10] = 0x01
+			log.Println("IMU DIFF OVER 20 DEGREE STOP RIGHT NOW")
+		}
+
+		if imuReset && len(sendbytes) > 0 {
+			sendbytes[10] = 0x00
+			sendbytes[9] = 0x02
+			sendbytes[8] = 0x00
+			log.Println("IMU RESET")
+		}
+		imudegree = recvdata.ImuDir
+
+		n, _ := port.Write(sendbytes)     //書き込み
+		time.Sleep(16 * time.Millisecond) //少し待つ
+		log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
+		log.Println(sendbytes)            //送信済みのバイトを表示
+
 		time.Sleep(100 * time.Nanosecond)
+	}
+}
+
+var imuReset bool = false
+
+func RunGPIO(chgpio chan bool) {
+	err := rpio.Open()
+	CheckError(err)
+	led := rpio.Pin(21)
+	led.Output()
+	led2 := rpio.Pin(26)
+	led.Output()
+
+	button1 := rpio.Pin(19)
+	button1.Input()
+
+	ledsec := 500 * time.Millisecond
+	for {
+		if recvdata.Volt <= 132 {
+			led2.High()
+			time.Sleep(100 * time.Millisecond)
+			led2.Low()
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			time.Sleep(ledsec)
+			led.Write(rpio.High)
+			if button1.Read() == rpio.High {
+				imuReset = true
+				ledsec = 100 * time.Millisecond
+			} else {
+				imuReset = false
+				ledsec = 500 * time.Millisecond
+			}
+			time.Sleep(ledsec)
+			led.Write(rpio.Low)
+		}
 	}
 }
 
@@ -143,6 +183,10 @@ func kickCheck(chkicker chan bool) {
 			//チップキックをオフにし、値を0にする
 			chip_enable = false
 			chip_val = 0
+		}
+		if imuError {
+			time.Sleep(500 * time.Millisecond)
+			imuError = false
 		}
 		//ループを行うため、少し待機する
 		time.Sleep(16 * time.Millisecond)
@@ -176,47 +220,23 @@ func main() {
 	var MyID uint32 = uint32(iptoid)
 
 	chclient := make(chan bool)
-	chapi := make(chan bool)
 	chserver := make(chan bool)
 	chserial := make(chan bool)
 	chkick := make(chan bool)
+	chgpio := make(chan bool)
 
 	//各並列処理部分
-	go WebAPI(chapi, MyID)
 	go RunClient(chclient, MyID, ip)
 	go RunServer(chserver, MyID)
 	go RunSerial(chserial, MyID)
 	go kickCheck(chkick)
+	go RunGPIO(chgpio)
 
-	<-chapi
 	<-chclient
 	<-chserver
 	<-chserial
 	<-chkick
-}
-
-func WebAPI(chapi chan bool, MyID uint32) {
-	//WebAPIを起動
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		var buf bytes.Buffer
-		enc := json.NewEncoder(&buf)
-		if err := enc.Encode(&robotstatus); err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(buf.String())
-
-		_, err := fmt.Fprint(w, buf.String())
-		if err != nil {
-			return
-		}
-	}
-
-	// GET /robotstatus
-	http.HandleFunc("/robotstatus", handler)
-	//ポート 8080番でサーバを立ち上げる
-	log.Fatal(http.ListenAndServe(":8080", nil))
-
-	chapi <- true
+	<-chgpio
 }
 
 func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *pb_gen.Robot_Status {
@@ -240,6 +260,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 	defer conn.Close()
 
 	for {
+		log.Println(recvdata.IsHoldBall)
 		pe := createStatus(int32(MyID), recvdata.IsHoldBall, false, false)
 		Data, _ := proto.Marshal(pe)
 
@@ -375,9 +396,9 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				//Velangular_deg がマイナス値のときは、マイナスであるという情報を付加(imuFlag)
 				if Velangular_deg < 0 {
 					Velangular_deg = Velangular_deg * -1
-					bytearray.imuFlg = true
+					bytearray.imuFlg = 1
 				} else {
-					bytearray.imuFlg = false
+					bytearray.imuFlg = 0
 				}
 				bytearray.imuDir = uint8(Velangular_deg) //IMU情報
 				bytearray.emg = false                    //EMG情報
@@ -391,7 +412,6 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					log.Fatal(err)
 				}
 			}
-
 			//IDが255のときは、モーター動作させず緊急停止フェーズに移行
 			if v.GetId() == 255 {
 				bytearray := SendStruct{} //送信用構造体
@@ -407,9 +427,63 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					log.Fatal(err)
 				}
 			}
+
+			if v.GetId() == 254 {
+				bytearray := SendStruct{} //送信用構造体
+				bytearray.emg = false     // 非常用モード
+				bytearray.imuFlg = 2
+				bytearray.imuDir = 0
+				bytearray.preamble = 0xFF //プリアンブル
+				bytearray.motor[0] = 100
+				bytearray.motor[1] = 100
+				bytearray.motor[2] = 100
+				bytearray.motor[3] = 100
+
+				sendarray = bytes.Buffer{}
+				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
+
+				log.Println("=======IMU RESET=======")
+
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			if v.GetId() == MyID+50 {
+				bytearray := SendStruct{} //送信用構造体
+				bytearray.emg = false     // 非常用モード
+				bytearray.imuFlg = 3
+
+				Velangular := float64(v.GetVelangular())
+				// Velangular radian to degree
+				Velangular_deg := Velangular * (180 / math.Pi)
+
+				//Velangular_deg がマイナス値のときは、マイナスであるという情報を付加(imuFlag)
+				if Velangular_deg < 0 {
+					Velangular_deg = Velangular_deg * -1
+					bytearray.imuFlg = 2
+				} else {
+					bytearray.imuFlg = 3
+				}
+				bytearray.imuDir = uint8(Velangular_deg) //IMU情報
+
+				bytearray.preamble = 0xFF //プリアンブル
+				bytearray.motor[0] = 100
+				bytearray.motor[1] = 100
+				bytearray.motor[2] = 100
+				bytearray.motor[3] = 100
+
+				sendarray = bytes.Buffer{}
+				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
+
+				log.Println("=======IMU RESET=======")
+
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
 		}
 		log.Println("======================================")
-		fmt.Print("\033[H\033[2J")
 	}
 
 }
