@@ -17,11 +17,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+//ボーレート
 const BAUDRATE int = 9600
+
+//シリアルポート名 ラズパイ4の場合、"/dev/serial0"
 const SERIAL_PORT_NAME string = "/dev/serial0"
 
 var sendarray bytes.Buffer //送信用バッファ
 
+//受信時の構造体
 type RecvStruct struct {
 	Volt        uint8
 	PhotoSensor uint16
@@ -29,6 +33,7 @@ type RecvStruct struct {
 	ImuDir      int16
 }
 
+//送信時の構造体
 type SendStruct struct {
 	preamble     byte
 	motor        [4]uint8
@@ -40,16 +45,23 @@ type SendStruct struct {
 	emg          bool
 }
 
+//受信データ構造体
 var recvdata RecvStruct
+
+//imu角度
 var imudegree int16
+
+//imu速度超過時のフラグ
 var imuError bool = false
 
+//シリアル通信部分
 func RunSerial(chclient chan bool, MyID uint32) {
 	port, err := serial.Open(SERIAL_PORT_NAME, &serial.Mode{})
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	//構造体の宣言
 	recvdata = RecvStruct{}
 
 	//シリアル通信のモードをセット
@@ -66,8 +78,10 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 	for {
 
+		//受信できるまで読み込む。バイトが0xFF, 0x00, 0xFF, 0x00のときは受信できると判断する
 		buf := make([]byte, 1)
 		recvbuf := make([]byte, 6)
+		//ここで受信バッファをクリアする
 		port.ResetInputBuffer()
 		for {
 			port.Read(buf) //読み込み
@@ -78,6 +92,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 					if bytes.Equal(buf, []byte{0xFF}) {
 						port.Read(buf) //読み込み
 						if bytes.Equal(buf, []byte{0x00}) {
+							//合計6バイト
 							for i := 0; i < 6; i++ {
 								port.Read(buf)      //読み込み
 								recvbuf[i] = buf[0] //受信データを格納
@@ -92,58 +107,89 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		//バイナリから構造体に変換
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
+
+		//クライアントで受け取ったデータをバイト列に変更
 		sendbytes := sendarray.Bytes()
 
+		//バイト列がなかったら（初回受け取りを行っていない場合）、初期値を設定
+		if len(sendbytes) <= 0 {
+			sendbytes = []byte{0xFF, 100, 100, 100, 100, 0, 0, 0, 0, 0, 0}
+		}
+
+		//それぞれのデータを表示
 		log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
-		//100ナノ秒待つ
+
+		//高速回転防止機能
+		//フレームごとの角度が35度を超えると, EMGをセットする
 		if len(sendbytes) > 0 {
 			if math.Abs(math.Abs(float64(imudegree))-math.Abs(float64(recvdata.ImuDir))) > 35.0 {
 				imuError = true
 			}
 		}
+		// 角速度が大幅に超えた場合
 		if imuError && len(sendbytes) > 0 {
+			//EMGをセット
 			sendbytes[10] = 0x01
-			log.Println("IMU DIFF OVER 20 DEGREE STOP RIGHT NOW")
+			log.Println("IMU DIFF OVER 35 DEGREE EMG STOPPING..")
 		}
 
+		//imu角度リセットの動作部分
 		if imuReset && len(sendbytes) > 0 {
+			//EMGを解除
 			sendbytes[10] = 0x00
+			//imu角度フラグを2にセット
 			sendbytes[9] = 0x02
+			//imu角度を0にセット
 			sendbytes[8] = 0x00
 			log.Println("IMU RESET")
 		}
+		//前のフレームのimu角度を保持
 		imudegree = recvdata.ImuDir
 
-		n, _ := port.Write(sendbytes)     //書き込み
+		port.Write(sendbytes)             //書き込み
 		time.Sleep(16 * time.Millisecond) //少し待つ
-		log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
-		log.Println(sendbytes)            //送信済みのバイトを表示
+		//log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
+		log.Println(sendbytes) //送信済みのバイトを表示
 
+		//100ナノ秒待つ
 		time.Sleep(100 * time.Nanosecond)
 	}
 }
 
 var imuReset bool = false
 
+//GPIO処理部分
 func RunGPIO(chgpio chan bool) {
+
+	//ラズパイのGPIOのメモリを確保
 	err := rpio.Open()
 	CheckError(err)
+
+	//GPIO21をLED1に設定。出力
 	led := rpio.Pin(21)
 	led.Output()
+
+	//GPIO26をLED2に設定。出力
 	led2 := rpio.Pin(26)
 	led.Output()
 
+	//GPIO19をbutton1に設定。入力
 	button1 := rpio.Pin(19)
 	button1.Input()
 
+	//Lチカ速度
 	ledsec := 500 * time.Millisecond
 	for {
+		//電圧降下検知
 		if recvdata.Volt <= 132 {
+			//高速チカチカ
 			led2.High()
 			time.Sleep(100 * time.Millisecond)
 			led2.Low()
 			time.Sleep(100 * time.Millisecond)
 		} else {
+			//通常チカチカ。ボタンが押されたら高速チカチカ
+			//ボタンが押されたら、imuをリセットする
 			time.Sleep(ledsec)
 			led.Write(rpio.High)
 			if button1.Read() == rpio.High {
@@ -294,12 +340,14 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 			log.Fatal("Error: ", err)
 		}
 
+		//受信元表示
 		log.Printf("Data received from %s", addr)
 
 		robotcmd := packet.Commands.GetRobotCommands()
 
 		for _, v := range robotcmd {
 			log.Printf("%d\n", int(v.GetId()))
+			//ロボットIDが自分のIDと一致したら、受信した情報を反映する
 			if v.GetId() == MyID {
 				Id := v.GetId()
 				Kickspeedx := v.GetKickspeedx()
@@ -417,7 +465,10 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				bytearray := SendStruct{} //送信用構造体
 				bytearray.emg = true      // 非常用モード
 				bytearray.preamble = 0xFF //プリアンブル
-
+				bytearray.motor[0] = 100
+				bytearray.motor[1] = 100
+				bytearray.motor[2] = 100
+				bytearray.motor[3] = 100
 				sendarray = bytes.Buffer{}
 				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
 
@@ -428,6 +479,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				}
 			}
 
+			//IMUリセット
 			if v.GetId() == 254 {
 				bytearray := SendStruct{} //送信用構造体
 				bytearray.emg = false     // 非常用モード
@@ -449,6 +501,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				}
 			}
 
+			//IMU単独リセット
 			if v.GetId() == MyID+50 {
 				bytearray := SendStruct{} //送信用構造体
 				bytearray.emg = false     // 非常用モード
@@ -461,9 +514,9 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				//Velangular_deg がマイナス値のときは、マイナスであるという情報を付加(imuFlag)
 				if Velangular_deg < 0 {
 					Velangular_deg = Velangular_deg * -1
-					bytearray.imuFlg = 2
-				} else {
 					bytearray.imuFlg = 3
+				} else {
+					bytearray.imuFlg = 2
 				}
 				bytearray.imuDir = uint8(Velangular_deg) //IMU情報
 
@@ -476,7 +529,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				sendarray = bytes.Buffer{}
 				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
 
-				log.Println("=======IMU RESET=======")
+				log.Println("=======IMU RESET(RESET TO ANGLE)=======")
 
 				if err != nil {
 					log.Fatal(err)
