@@ -463,6 +463,11 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				} else {
 					bytearray.imuFlg = 0
 				}
+
+				if v.GetWheelsspeed() {
+					bytearray.imuFlg = 9 //IMU制御をしない
+					bytearray.imuDir = 0 //IMU情報
+				}
 				bytearray.imuDir = uint8(Velangular_deg) //IMU情報
 				bytearray.emg = false                    //EMG情報
 
