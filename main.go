@@ -23,6 +23,8 @@ const BAUDRATE int = 9600
 //シリアルポート名 ラズパイ4の場合、"/dev/serial0"
 const SERIAL_PORT_NAME string = "/dev/serial0"
 
+const IMU_TOOFAST_THRESHOULD float64 = 35.0
+
 var sendarray bytes.Buffer //送信用バッファ
 
 //受信時の構造体
@@ -53,6 +55,8 @@ var imudegree int16
 
 //imu速度超過時のフラグ
 var imuError bool = false
+
+var last_recv_time time.Time = time.Now()
 
 //シリアル通信部分
 func RunSerial(chclient chan bool, MyID uint32) {
@@ -116,21 +120,31 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			sendbytes = []byte{0xFF, 100, 100, 100, 100, 0, 0, 0, 0, 0, 0}
 		}
 
+		//受信しなかった場合に自動的にモーターOFFする
+		if time.Since(last_recv_time) > 1*time.Second {
+			log.Println("No Data Recv")
+			for i := 2; i <= 4; i++ {
+				sendbytes[i] = 100
+			}
+		}
+
 		//それぞれのデータを表示
 		log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
 
 		//高速回転防止機能
-		//フレームごとの角度が35度を超えると, EMGをセットする
+		//フレームごとの角度が閾値を超えると, EMGをセットする
 		if len(sendbytes) > 0 {
-			if math.Abs(math.Abs(float64(imudegree))-math.Abs(float64(recvdata.ImuDir))) > 35.0 {
+			if math.Abs(math.Abs(float64(imudegree))-math.Abs(float64(recvdata.ImuDir))) > IMU_TOOFAST_THRESHOULD {
 				imuError = true
 			}
 		}
 		// 角速度が大幅に超えた場合
 		if imuError && len(sendbytes) > 0 {
-			//EMGをセット
-			sendbytes[10] = 0x01
-			log.Println("IMU DIFF OVER 35 DEGREE EMG STOPPING..")
+			if sendbytes[9] == 0x00 || sendbytes[9] == 0x01 {
+				//EMGをセット
+				sendbytes[10] = 0x01
+				log.Println("IMU DIFF OVER 35 DEGREE EMG STOPPING..")
+			}
 		}
 
 		//imu角度リセットの動作部分
@@ -296,8 +310,8 @@ func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *p
 
 //RACOON-MWにボールセンサ等の情報を送信するためのサーバ
 func RunServer(chserver chan bool, MyID uint32) {
-	ipv4 := "224.5.23.2"
-	port := "40000"
+	ipv4 := "224.5.69.4"
+	port := "16941"
 	addr := ipv4 + ":" + port
 
 	fmt.Println("Sender:", addr)
@@ -333,6 +347,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 	for {
 		n, addr, _ := serverConn.ReadFromUDP(buf)
+		last_recv_time = time.Now()
 		packet := &pb_gen.GrSim_Packet{}
 		err = proto.Unmarshal(buf[0:n], packet)
 
@@ -389,10 +404,10 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					Motor[2] = float64(v.GetWheel3())
 					Motor[3] = float64(v.GetWheel4())
 				} else {
-					Motor[0] = (math.Sin((Veltheta-60)*(math.Pi/180)) * Velnormalized) * 100
+					Motor[0] = (math.Sin((Veltheta-45)*(math.Pi/180)) * Velnormalized) * 100
 					Motor[1] = (math.Sin((Veltheta-135)*(math.Pi/180)) * Velnormalized) * 100
 					Motor[2] = (math.Sin((Veltheta-225)*(math.Pi/180)) * Velnormalized) * 100
-					Motor[3] = (math.Sin((Veltheta-300)*(math.Pi/180)) * Velnormalized) * 100
+					Motor[3] = (math.Sin((Veltheta-315)*(math.Pi/180)) * Velnormalized) * 100
 				}
 
 				//Limit Motor Value
@@ -479,7 +494,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				}
 			}
 
-			//IMUリセット
+			//IMU全体リセット
 			if v.GetId() == 254 {
 				bytearray := SendStruct{} //送信用構造体
 				bytearray.emg = false     // 非常用モード
@@ -502,7 +517,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 			}
 
 			//IMU単独リセット
-			if v.GetId() == MyID+50 {
+			if v.GetId() == MyID+100 {
 				bytearray := SendStruct{} //送信用構造体
 				bytearray.emg = false     // 非常用モード
 				bytearray.imuFlg = 3
