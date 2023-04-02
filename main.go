@@ -17,17 +17,28 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-//ボーレート
+// ボーレート
 const BAUDRATE int = 9600
 
-//シリアルポート名 ラズパイ4の場合、"/dev/serial0"
+// シリアルポート名 ラズパイ4の場合、"/dev/serial0"
 const SERIAL_PORT_NAME string = "/dev/serial0"
 
 const IMU_TOOFAST_THRESHOULD float64 = 35.0
 
+// ボールセンサー故障検知しきい値。L: OPEN故障、H: CLOSE故障
+const BALLSENS_LBREAK_THRESHOULD int = 100
+const BALLSENS_HBREAK_THRESHOULD int = 100
+
+// ボールセンサーの反応しきい値。
+const BALLSENS_LOW_THRESHOULD int = 100
+
+// バッテリーの低下しきい値。 150 = 15.0V
+const BATTERY_LOW_THRESHOULD int = 150
+const BATTERY_CRITICAL_THRESHOULD int = 140
+
 var sendarray bytes.Buffer //送信用バッファ
 
-//受信時の構造体
+// 受信時の構造体
 type RecvStruct struct {
 	Volt        uint8
 	PhotoSensor uint16
@@ -35,7 +46,7 @@ type RecvStruct struct {
 	ImuDir      int16
 }
 
-//送信時の構造体
+// 送信時の構造体
 type SendStruct struct {
 	preamble     byte
 	motor        [4]uint8
@@ -47,18 +58,71 @@ type SendStruct struct {
 	emg          bool
 }
 
-//受信データ構造体
+// 受信データ構造体
 var recvdata RecvStruct
 
-//imu角度
+// imu角度
 var imudegree int16
 
-//imu速度超過時のフラグ
+// imu速度超過時のフラグ
 var imuError bool = false
 
 var last_recv_time time.Time = time.Now()
 
-//シリアル通信部分
+// ポート8080番で待ち受ける。
+const PORT string = ":8080"
+
+func RunApi(chapi chan bool, MyID uint32) {
+	//ポートを開く
+	listener, err := net.Listen("tcp", PORT)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer listener.Close()
+
+	//接続を待つ
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		//接続があったら処理を行う
+		go HandleRequest(conn)
+	}
+}
+
+var isRobotError = false
+var isRobotEmgError = false
+
+var RobotErrorCode = 0
+var RobotErrorMessage = ""
+
+var ballSensLowCount = 0
+
+// 接続があったら処理を行う
+func HandleRequest(conn net.Conn) {
+	//200 OKを返す
+	fmt.Fprintf(conn, "HTTP/1.1 200 OK\r \n")
+
+	//そのまま、recvdataをJson形式で返す
+	//fmt.Fprintf(conn, "%s", recvdata)
+
+	//Json形式で返す
+	fmt.Fprintf(conn, "{")
+	fmt.Fprintf(conn, "\"VOLT\": %f,", float32(recvdata.Volt)/10.0)
+	fmt.Fprintf(conn, "\"PHOTOSENSOR\":%d,", recvdata.PhotoSensor)
+	fmt.Fprintf(conn, "\"ISHOLDBALL\":%t,", recvdata.IsHoldBall)
+	fmt.Fprintf(conn, "\"IMUDIR\":%d", recvdata.ImuDir)
+	fmt.Fprintf(conn, "\"ERROR \":%t", isRobotError)
+	fmt.Fprintf(conn, "\"ERRORCODE \":%d", RobotErrorCode)
+	fmt.Fprintf(conn, "\"ERRORMESSAGE \":%s", RobotErrorMessage)
+	fmt.Fprintf(conn, "}")
+
+	//接続を閉じる
+	conn.Close()
+}
+
+// シリアル通信部分
 func RunSerial(chclient chan bool, MyID uint32) {
 	port, err := serial.Open(SERIAL_PORT_NAME, &serial.Mode{})
 	if err != nil {
@@ -111,6 +175,55 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		//バイナリから構造体に変換
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
+
+		//////////////////////////////////
+		///
+		/// エラーチェック部分
+		///
+		//////////////////////////////////
+		//ボールセンサーが低いときにカウントを増やす
+		if recvdata.PhotoSensor < uint16(BALLSENS_LOW_THRESHOULD) {
+			ballSensLowCount++
+		} else {
+			ballSensLowCount = 0
+		}
+
+		//ボールセンサーが低いときにカウントが一定値(10s)を超えたらエラー
+		if ballSensLowCount > 600 {
+			isRobotError = true
+			RobotErrorCode = 1
+			RobotErrorMessage = "ボールセンサ異常"
+		}
+
+		//ボールセンサの値が極端に高いときはエラー
+		if recvdata.PhotoSensor > uint16(BALLSENS_HBREAK_THRESHOULD) {
+			isRobotError = true
+			RobotErrorCode = 1
+			RobotErrorMessage = "ボールセンサ異常(回路故障の可能性)"
+		}
+
+		//ボールセンサの値が極端に低いときはエラー
+		if recvdata.PhotoSensor < uint16(BALLSENS_LBREAK_THRESHOULD) {
+			isRobotError = true
+			RobotErrorCode = 1
+			RobotErrorMessage = "ボールセンサ異常(回路故障の可能性)"
+		}
+
+		//バッテリの電圧が一定量を下回ったらエラー
+		if recvdata.Volt < uint8(BATTERY_LOW_THRESHOULD) {
+			isRobotError = true
+			RobotErrorCode = 2
+			RobotErrorMessage = "バッテリ電圧異常"
+		}
+
+		//バッテリの電圧が極端に低いとき（速度に影響を与えるレベル）はエラー
+		if recvdata.Volt < uint8(BATTERY_CRITICAL_THRESHOULD) {
+			isRobotError = true
+			RobotErrorCode = 2
+			RobotErrorMessage = "バッテリ電圧異常(回路故障の可能性)"
+
+			isRobotEmgError = true //緊急停止
+		}
 
 		//クライアントで受け取ったデータをバイト列に変更
 		sendbytes := sendarray.Bytes()
@@ -172,7 +285,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 var imuReset bool = false
 
-//GPIO処理部分
+// GPIO処理部分
 func RunGPIO(chgpio chan bool) {
 
 	//ラズパイのGPIOのメモリを確保
@@ -195,7 +308,7 @@ func RunGPIO(chgpio chan bool) {
 	ledsec := 500 * time.Millisecond
 	for {
 		//電圧降下検知
-		if recvdata.Volt <= 132 {
+		if recvdata.Volt <= 140 {
 			//高速チカチカ
 			led2.High()
 			time.Sleep(100 * time.Millisecond)
@@ -224,8 +337,8 @@ var kicker_val uint8 = 0       //キッカーの値
 var chip_enable bool = false   //チップキックの入力のON OFFを定義する
 var chip_val uint8 = 0         //チップキックの値
 
-//キッカーパワーが入力された時に、値を固定する関数
-//並列での処理が行われる
+// キッカーパワーが入力された時に、値を固定する関数
+// 並列での処理が行われる
 func kickCheck(chkicker chan bool) {
 	for {
 		//ストレートキックが入力されたとき
@@ -284,6 +397,7 @@ func main() {
 	chserial := make(chan bool)
 	chkick := make(chan bool)
 	chgpio := make(chan bool)
+	chapi := make(chan bool)
 
 	//各並列処理部分
 	go RunClient(chclient, MyID, ip)
@@ -291,12 +405,14 @@ func main() {
 	go RunSerial(chserial, MyID)
 	go kickCheck(chkick)
 	go RunGPIO(chgpio)
+	go RunApi(chapi, MyID)
 
 	<-chclient
 	<-chserver
 	<-chserial
 	<-chkick
 	<-chgpio
+	<-chapi
 }
 
 func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *pb_gen.Robot_Status {
@@ -308,7 +424,7 @@ func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *p
 	return pe
 }
 
-//RACOON-MWにボールセンサ等の情報を送信するためのサーバ
+// RACOON-MWにボールセンサ等の情報を送信するためのサーバ
 func RunServer(chserver chan bool, MyID uint32) {
 	ipv4 := "224.5.69.4"
 	port := "16941"
@@ -331,7 +447,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 
 }
 
-//AIからの情報を受信するクライアント
+// AIからの情報を受信するクライアント
 func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 	serverAddr := &net.UDPAddr{
