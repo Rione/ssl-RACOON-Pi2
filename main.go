@@ -7,8 +7,8 @@ import (
 	"log"
 	"math"
 	"net"
-	"strconv"
-	"strings"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
@@ -241,6 +241,12 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			}
 		}
 
+		if kicker_enable {
+			sendbytes[6] = kicker_val
+		} else {
+			sendbytes[6] = 0
+		}
+
 		//それぞれのデータを表示
 		log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
 
@@ -292,42 +298,120 @@ func RunGPIO(chgpio chan bool) {
 	err := rpio.Open()
 	CheckError(err)
 
-	//GPIO21をLED1に設定。出力
-	led := rpio.Pin(21)
+	//GPIO18をLED1に設定。出力
+	led := rpio.Pin(18)
 	led.Output()
 
-	//GPIO26をLED2に設定。出力
-	led2 := rpio.Pin(26)
+	//GPIO27をLED2に設定。出力
+	led2 := rpio.Pin(27)
 	led.Output()
 
-	//GPIO19をbutton1に設定。入力
-	button1 := rpio.Pin(19)
+	//GPIO22をbutton1に設定。入力(S2)
+	button1 := rpio.Pin(22)
 	button1.Input()
+	button1.PullUp()
+
+	//GPIO 24をbutton2に設定。入力(S3)
+	button2 := rpio.Pin(24)
+	button2.Input()
+	button2.PullUp()
+
+	//GPIO12をブザーPWMに設定。出力
+	buzzer := rpio.Pin(12)
+	buzzer.Mode(rpio.Pwm)
+	buzzer.Freq(64000)
+	buzzer.DutyCycle(0, 32)
+
+	// buzzer.DutyCycle(16, 32)
+	// time.Sleep(time.Millisecond * 100)
+	// buzzer.DutyCycle(0, 32)
+	// time.Sleep(time.Millisecond * 100)
+
+	buzzer.Freq(1244 * 64)
+	buzzer.DutyCycle(16, 32)
+	time.Sleep(time.Millisecond * 100)
+	buzzer.Freq(1108 * 64)
+	time.Sleep(time.Millisecond * 100)
+	buzzer.Freq(739 * 64)
+	time.Sleep(time.Millisecond * 150)
+	buzzer.DutyCycle(0, 32)
+	time.Sleep(time.Millisecond * 100)
+
+	//1479Hzにする
+	buzzer.Freq(1479 * 64)
+	buzzer.DutyCycle(16, 32)
+	time.Sleep(time.Millisecond * 100)
+	buzzer.DutyCycle(0, 32)
+	time.Sleep(time.Millisecond * 100)
+	buzzer.DutyCycle(16, 32)
+	time.Sleep(time.Millisecond * 100)
+	buzzer.DutyCycle(0, 32)
+
+	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
+	dip1 := rpio.Pin(6)
+	dip1.Input()
+	dip1.PullUp()
+	dip2 := rpio.Pin(25)
+	dip2.Input()
+	dip2.PullUp()
+	dip3 := rpio.Pin(4)
+	dip3.Input()
+	dip3.PullUp()
+	dip4 := rpio.Pin(5)
+	dip4.Input()
+	dip4.PullUp()
+
+	// DIP1, 2, 3 ,4 の状態を出力
+	fmt.Println("DIP1:", dip1.Read()^1)
+	fmt.Println("DIP2:", dip2.Read()^1)
+	fmt.Println("DIP3:", dip3.Read()^1)
+	fmt.Println("DIP4:", dip4.Read()^1)
+
+	//DIP 1, 2, 3, 4からhexを作成
+	hex := dip1.Read() ^ 1 + (dip2.Read()^1)*2 + (dip3.Read()^1)*4 + (dip4.Read()^1)*8
+
+	//hexを表示
+	fmt.Println("HEX:", int(hex))
 
 	//Lチカ速度
 	ledsec := 500 * time.Millisecond
 	for {
 		//電圧降下検知
-		if recvdata.Volt <= 140 {
+		if recvdata.Volt <= 155 {
+			buzzer.Freq(1200 * 64)
+			buzzer.DutyCycle(16, 32)
+
 			//高速チカチカ
 			led2.High()
 			time.Sleep(100 * time.Millisecond)
+
+			buzzer.Freq(760 * 64)
 			led2.Low()
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(150 * time.Millisecond)
 		} else {
 			//通常チカチカ。ボタンが押されたら高速チカチカ
 			//ボタンが押されたら、imuをリセットする
 			time.Sleep(ledsec)
 			led.Write(rpio.High)
-			if button1.Read() == rpio.High {
+			if button1.Read()^1 == rpio.High {
 				imuReset = true
 				ledsec = 100 * time.Millisecond
+				buzzer.DutyCycle(16, 32)
 			} else {
 				imuReset = false
 				ledsec = 500 * time.Millisecond
 			}
+			if button2.Read()^1 == rpio.High {
+				//kickする
+				buzzer.DutyCycle(16, 32)
+				time.Sleep(500 * time.Millisecond)
+				buzzer.DutyCycle(0, 32)
+				kicker_enable = true
+				kicker_val = 100
+			}
 			time.Sleep(ledsec)
 			led.Write(rpio.Low)
+			buzzer.DutyCycle(0, 32)
 		}
 	}
 }
@@ -368,6 +452,32 @@ func kickCheck(chkicker chan bool) {
 
 func main() {
 
+	//GPIOの初期化
+	if err := rpio.Open(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	defer rpio.Close()
+
+	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
+	dip1 := rpio.Pin(6)
+	dip1.Input()
+	dip1.PullUp()
+	dip2 := rpio.Pin(25)
+	dip2.Input()
+	dip2.PullUp()
+	dip3 := rpio.Pin(4)
+	dip3.Input()
+	dip3.PullUp()
+	dip4 := rpio.Pin(5)
+	dip4.Input()
+	dip4.PullUp()
+
+	// HEXの値を表示
+	hex := dip1.Read() ^ 1 + (dip2.Read()^1)*2 + (dip3.Read()^1)*4 + (dip4.Read()^1)*8
+	fmt.Println("GOT ID FROM DIP SW:", int(hex))
+	diptoid := int(hex)
+
 	netInterfaceAddresses, _ := net.InterfaceAddrs()
 
 	ip := "0.0.0.0"
@@ -377,20 +487,21 @@ func main() {
 			ip = networkIp.IP.String()
 		}
 	}
-	//IPアドレスを表示
-	fmt.Println("Resolved Host IP: " + ip)
-	//IPアドレスの各数字部分を分解
-	//例: 192.168.100.101 の場合、 192 が[0]、168 が[1]、100 が[2]、101 が[3]
-	hostpart := strings.Split(ip, ".")
-	//上記例の[3]なので、101の部分を取得
-	iptoid, _ := strconv.Atoi(hostpart[3])
-	// 100を引いてロボットIDを決定
-	iptoid = iptoid - 100
-	//上記推測の結果を表示
-	fmt.Println("Estimated Robot ID: " + strconv.Itoa(iptoid))
+
+	//Ctrl+Cを押したときに終了するようにする
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for range c {
+			//終了時にGPIOを解放する
+			rpio.Close()
+			log.Println("Bye")
+			os.Exit(0)
+		}
+	}()
 
 	//MyIDで指定したロボットIDを取得
-	var MyID uint32 = uint32(iptoid)
+	var MyID uint32 = uint32(diptoid)
 
 	chclient := make(chan bool)
 	chserver := make(chan bool)
