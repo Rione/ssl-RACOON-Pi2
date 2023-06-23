@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"time"
 
@@ -499,6 +500,54 @@ func main() {
 			os.Exit(0)
 		}
 	}()
+
+	//Hostnameを取得する
+	cmd := exec.Command("hostname")
+	out, err := cmd.Output()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(out))
+
+	//もし初期値のraspberrypiだったら
+	if string(out) == "raspberrypi\n" {
+		//UNIX時間の下5桁を取得する
+		unixtime := time.Now().UnixNano()
+		log.Println("Unixtime is " + fmt.Sprintf("%d", unixtime))
+		unixtime = unixtime % 100000
+
+		//Hostnameをracoon-XXXXXに変更する
+		hostname := "racoon-" + fmt.Sprintf("%05d", unixtime)
+
+		log.Println("Change Hostname To " + hostname)
+		//Change Hostname
+		//hostnamectl set-hostname raspberrypi コマンド実行
+		cmd = exec.Command("hostnamectl", "set-hostname", hostname)
+		cmd.Run()
+
+		//再起動
+		log.Println("=====Reboot=====")
+
+		buzzer := rpio.Pin(12)
+		buzzer.Mode(rpio.Pwm)
+		buzzer.Freq(1175 * 64)
+		buzzer.DutyCycle(16, 32)
+		time.Sleep(500 * time.Millisecond)
+		buzzer.DutyCycle(0, 32)
+		buzzer.Freq(1396 * 64)
+		buzzer.DutyCycle(16, 32)
+		time.Sleep(500 * time.Millisecond)
+		buzzer.DutyCycle(0, 32)
+		buzzer.Freq(1760 * 64)
+		buzzer.DutyCycle(16, 32)
+		time.Sleep(500 * time.Millisecond)
+		buzzer.DutyCycle(0, 32)
+
+		//reboot コマンド実行
+		cmd = exec.Command("reboot")
+		cmd.Run()
+
+	}
 
 	//MyIDで指定したロボットIDを取得
 	var MyID uint32 = uint32(diptoid)
