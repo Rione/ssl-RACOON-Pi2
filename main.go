@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
@@ -35,7 +37,7 @@ const BALLSENS_LOW_THRESHOULD int = 100
 
 // バッテリーの低下しきい値。 150 = 15.0V
 const BATTERY_LOW_THRESHOULD int = 150
-const BATTERY_CRITICAL_THRESHOULD int = 140
+const BATTERY_CRITICAL_THRESHOULD int = 145
 
 var sendarray bytes.Buffer //送信用バッファ
 
@@ -71,7 +73,7 @@ var imuError bool = false
 var last_recv_time time.Time = time.Now()
 
 // ポート8080番で待ち受ける。
-const PORT string = ":8080"
+const PORT string = ":9191"
 
 func RunApi(chapi chan bool, MyID uint32) {
 	//ポートを開く
@@ -87,6 +89,8 @@ func RunApi(chapi chan bool, MyID uint32) {
 		if err != nil {
 			log.Fatal(err)
 		}
+		// log
+		log.Println("Remote API Connected by ", conn.RemoteAddr())
 		//接続があったら処理を行う
 		go HandleRequest(conn)
 	}
@@ -100,27 +104,119 @@ var RobotErrorMessage = ""
 
 var ballSensLowCount = 0
 
+var doBuzzer = false
+var buzzerTone = 0
+var buzzerTime time.Duration = 0 * time.Millisecond
+
+var alarmIgnore = false
+
 // 接続があったら処理を行う
 func HandleRequest(conn net.Conn) {
-	//200 OKを返す
-	fmt.Fprintf(conn, "HTTP/1.1 200 OK\r \n")
+	defer conn.Close()
 
-	//そのまま、recvdataをJson形式で返す
-	//fmt.Fprintf(conn, "%s", recvdata)
+	//リクエストを解析
+	buf := make([]byte, 1024)
+	_, err := conn.Read(buf)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 
-	//Json形式で返す
-	fmt.Fprintf(conn, "{")
-	fmt.Fprintf(conn, "\"VOLT\": %f,", float32(recvdata.Volt)/10.0)
-	fmt.Fprintf(conn, "\"PHOTOSENSOR\":%d,", recvdata.PhotoSensor)
-	fmt.Fprintf(conn, "\"ISHOLDBALL\":%t,", recvdata.IsHoldBall)
-	fmt.Fprintf(conn, "\"IMUDIR\":%d", recvdata.ImuDir)
-	fmt.Fprintf(conn, "\"ERROR \":%t", isRobotError)
-	fmt.Fprintf(conn, "\"ERRORCODE \":%d", RobotErrorCode)
-	fmt.Fprintf(conn, "\"ERRORMESSAGE \":%s", RobotErrorMessage)
-	fmt.Fprintf(conn, "}")
+	// リクエストを解析
+	// リクエストヘッダーの1行目を取得
+	request := string(buf)
+	// リクエストヘッダーの1行目をスペースで区切る
+	requests := strings.Split(request, " ")
+	// リクエストヘッダーの1行目からリクエストの種類を取得
+	requestType := requests[0]
 
-	//接続を閉じる
-	conn.Close()
+	// リクエストの種類がGETでなければエラーを返す
+	if requestType != "GET" {
+		fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
+		fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+		fmt.Fprintf(conn, "400 Bad Request\r\n")
+		return
+	}
+
+	// リクエストのパスが"/buzzer"の場合
+	if strings.Split(requests[1], "/")[1] == "buzzer" {
+		// tone が指定されていない場合
+		if len(requests) < 3 {
+			fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "400 Bad Request\r\n")
+			return
+		}
+		// buzzer/ の後に tone が指定されている場合
+		log.Println(strings.Split(requests[1], "/")[1])
+		tone, err := strconv.Atoi(strings.Split(requests[1], "/")[3])
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "400 Bad Request\r\n")
+			return
+		}
+		duration, err := strconv.Atoi(strings.Split(requests[1], "/")[4])
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "400 Bad Request\r\n")
+			return
+		}
+		// tone が 0 から 12 でない場合
+		if tone < 0 || tone > 15 {
+			fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "400 Bad Request\r\n")
+			return
+		}
+		// duration が 50 から 3000 でない場合
+		if duration < 50 || duration > 3000 {
+			fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "400 Bad Request\r\n")
+			return
+		}
+
+		// OK と表示
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n")
+		fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+		fmt.Fprintf(conn, "BUZZER OK\r\n")
+		//ブザーを1秒鳴らす
+		doBuzzer = true
+		buzzerTone = tone
+		buzzerTime = time.Duration(duration) * time.Millisecond
+		return
+	}
+
+	if strings.Split(requests[1], "/")[1] == "ignorebatterylow" {
+		// OK と表示
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n")
+		fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+		fmt.Fprintf(conn, "IGNORE BATTERY LOW OK\r\n")
+		//アラーム無視をセットする
+		alarmIgnore = true
+		return
+	}
+
+	// 200 OKを返す
+	fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n")
+	// UTF-8指定
+	fmt.Fprintf(conn, "Content-Type: application/json; charset=utf-8\r\n\r\n")
+
+	// JSON形式で返す
+	response := fmt.Sprintf(`{
+		"VOLT": %f,
+		"PHOTOSENSOR": %d,
+		"ISHOLDBALL": %t,
+		"IMUDIR": %d,
+		"ERROR": %t,
+		"ERRORCODE": %d,
+		"ERRORMESSAGE": "%s"
+	}`, float32(recvdata.Volt)/10.0, recvdata.PhotoSensor, recvdata.IsHoldBall, recvdata.ImuDir, isRobotError, RobotErrorCode, RobotErrorMessage)
+
+	fmt.Fprint(conn, response)
+
 }
 
 // シリアル通信部分
@@ -196,12 +292,12 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			RobotErrorMessage = "ボールセンサ異常"
 		}
 
-		//ボールセンサの値が極端に高いときはエラー
-		if recvdata.PhotoSensor > uint16(BALLSENS_HBREAK_THRESHOULD) {
-			isRobotError = true
-			RobotErrorCode = 1
-			RobotErrorMessage = "ボールセンサ異常(回路故障の可能性)"
-		}
+		// //ボールセンサの値が極端に高いときはエラー
+		// if recvdata.PhotoSensor > uint16(BALLSENS_HBREAK_THRESHOULD) {
+		// 	isRobotError = true
+		// 	RobotErrorCode = 1
+		// 	RobotErrorMessage = "ボールセンサ異常(回路故障の可能性)"
+		// }
 
 		//ボールセンサの値が極端に低いときはエラー
 		if recvdata.PhotoSensor < uint16(BALLSENS_LBREAK_THRESHOULD) {
@@ -226,6 +322,10 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			isRobotEmgError = true //緊急停止
 		}
 
+		//TODO: Pendingをfalseにした瞬間にAIが受信し始める。Mutex必要か？
+		if imuResetPending {
+			imuResetPending = false
+		}
 		//クライアントで受け取ったデータをバイト列に変更
 		sendbytes := sendarray.Bytes()
 
@@ -236,7 +336,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		//受信しなかった場合に自動的にモーターOFFする
 		if time.Since(last_recv_time) > 1*time.Second {
-			log.Println("No Data Recv")
+			// log.Println("No Data Recv")
 			for i := 2; i <= 4; i++ {
 				sendbytes[i] = 100
 			}
@@ -249,7 +349,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		}
 
 		//それぞれのデータを表示
-		log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
+		// log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
 
 		//高速回転防止機能
 		//フレームごとの角度が閾値を超えると, EMGをセットする
@@ -283,7 +383,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		port.Write(sendbytes)             //書き込み
 		time.Sleep(16 * time.Millisecond) //少し待つ
 		//log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
-		log.Println(sendbytes) //送信済みのバイトを表示
+		// log.Println(sendbytes) //送信済みのバイトを表示
 
 		//100ナノ秒待つ
 		time.Sleep(100 * time.Nanosecond)
@@ -376,22 +476,33 @@ func RunGPIO(chgpio chan bool) {
 
 	//Lチカ速度
 	ledsec := 500 * time.Millisecond
+	alarmVoltage := BATTERY_LOW_THRESHOULD
 	for {
 		//電圧降下検知
-		if recvdata.Volt <= 155 {
-			buzzer.Freq(1200 * 64)
-			buzzer.DutyCycle(16, 32)
+		if recvdata.Volt <= uint8(alarmVoltage) {
+			for {
+				buzzer.Freq(1200 * 64)
+				buzzer.DutyCycle(16, 32)
 
-			//高速チカチカ
-			led2.High()
-			time.Sleep(100 * time.Millisecond)
+				//高速チカチカ
+				led2.High()
+				time.Sleep(100 * time.Millisecond)
 
-			buzzer.Freq(760 * 64)
-			led2.Low()
-			time.Sleep(150 * time.Millisecond)
+				buzzer.Freq(760 * 64)
+				led2.Low()
+				time.Sleep(150 * time.Millisecond)
+
+				if button1.Read()^1 == rpio.High || alarmIgnore == true {
+					//一時的にアラーム解除する
+					log.Println("BATTERY ALARM IGNORED")
+					alarmVoltage = BATTERY_CRITICAL_THRESHOULD
+					break
+				}
+			}
 		} else {
 			//通常チカチカ。ボタンが押されたら高速チカチカ
 			//ボタンが押されたら、imuをリセットする
+			buzzer.Freq(1479 * 64)
 			time.Sleep(ledsec)
 			led.Write(rpio.High)
 			if button1.Read()^1 == rpio.High {
@@ -413,6 +524,14 @@ func RunGPIO(chgpio chan bool) {
 			time.Sleep(ledsec)
 			led.Write(rpio.Low)
 			buzzer.DutyCycle(0, 32)
+
+			if doBuzzer {
+				buzzer.Freq(int(440*math.Pow(1.0595, float64(buzzerTone))) * 64)
+				buzzer.DutyCycle(16, 32)
+				time.Sleep(buzzerTime)
+				buzzer.DutyCycle(0, 32)
+				doBuzzer = false
+			}
 		}
 	}
 }
@@ -596,7 +715,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 	defer conn.Close()
 
 	for {
-		log.Println(recvdata.IsHoldBall)
+		// log.Println(recvdata.IsHoldBall)
 		pe := createStatus(int32(MyID), recvdata.IsHoldBall, false, false)
 		Data, _ := proto.Marshal(pe)
 
@@ -606,6 +725,10 @@ func RunServer(chserver chan bool, MyID uint32) {
 	}
 
 }
+
+// IMU Resetを確実に行うためのフラグ
+// 待機モードにうつり、これがセットされているときはAIから受け取らない
+var imuResetPending bool = false
 
 // AIからの情報を受信するクライアント
 func RunClient(chclient chan bool, MyID uint32, ip string) {
@@ -750,10 +873,11 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				//log.Printf("Velnormalized: %f", Velnormalized)
 				//log.Printf("Float64BeforeInt: %f", Motor)
 				sendarray = bytes.Buffer{}
-				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
-
-				if err != nil {
-					log.Fatal(err)
+				if imuResetPending == false {
+					err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
+					if err != nil {
+						log.Fatal(err)
+					}
 				}
 			}
 			//IDが255のときは、モーター動作させず緊急停止フェーズに移行
@@ -826,6 +950,9 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
 
 				log.Println("=======IMU RESET(RESET TO ANGLE)=======")
+
+				//IMU Reset Pending フラグをたてる
+				imuResetPending = true
 
 				if err != nil {
 					log.Fatal(err)
