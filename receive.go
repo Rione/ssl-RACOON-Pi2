@@ -8,7 +8,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/Rione-SSL/RACOON-Pi/proto/pb_gen"
+	"github.com/Rione/ssl-RACOON-Pi/proto/pb_gen"
 	"google.golang.org/protobuf/proto"
 )
 

@@ -43,6 +43,8 @@ func kickCheck(chkicker chan bool) {
 
 func main() {
 
+	//自動アップデート
+	go confirmAndSelfUpdate()
 	//GPIOの初期化
 	if err := rpio.Open(); err != nil {
 		fmt.Println(err)
