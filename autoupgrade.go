@@ -11,7 +11,7 @@ import (
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
-const version = ""
+var version string
 
 func getVersion() string {
 	if version != "" {
@@ -27,6 +27,7 @@ func getVersion() string {
 
 func confirmAndSelfUpdate() {
 	var version = getVersion()
+	log.Println("Current version:", version)
 
 	if version == "(devel)" || version == "unknown" {
 		log.Println("NO VERSION INFO(DEV VERSION)")
@@ -53,7 +54,6 @@ func confirmAndSelfUpdate() {
 		log.Println("Error occurred while detecting version:", err)
 		return
 	}
-	log.Println("Current version:", version)
 	if !found {
 		log.Println("No releases found")
 		return
@@ -64,6 +64,7 @@ func confirmAndSelfUpdate() {
 		log.Println("Current version is the latest")
 		return
 	}
+	log.Println("New version available:", latest.Version)
 
 	latest, err = up.UpdateSelf(v, "Rione/ssl-RACOON-Pi")
 	if err != nil {
@@ -71,4 +72,6 @@ func confirmAndSelfUpdate() {
 		return
 	}
 	log.Println("Successfully updated to version", latest.Version)
+
+	os.Exit(1)
 }
