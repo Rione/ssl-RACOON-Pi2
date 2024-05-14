@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"log"
-	"math"
 	"time"
 
 	"go.bug.st/serial"
@@ -121,21 +120,21 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		//バイト列がなかったら（初回受け取りを行っていない場合）、初期値を設定
 		if len(sendbytes) <= 0 {
-			sendbytes = []byte{0xFF, 100, 100, 100, 100, 0, 0, 0, 0, 0, 0}
+			sendbytes = []byte{0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 		}
 
 		//受信しなかった場合に自動的にモーターOFFする
 		if time.Since(last_recv_time) > 1*time.Second {
 			// log.Println("No Data Recv")
-			for i := 2; i <= 4; i++ {
-				sendbytes[i] = 100
+			for i := 1; i <= 6; i++ {
+				sendbytes[i] = 0
 			}
 		}
 
 		if kicker_enable {
-			sendbytes[6] = kicker_val
+			sendbytes[8] = kicker_val
 		} else {
-			sendbytes[6] = 0
+			sendbytes[8] = 0
 		}
 
 		//それぞれのデータを表示
@@ -143,30 +142,20 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		//高速回転防止機能
 		//フレームごとの角度が閾値を超えると, EMGをセットする
-		if len(sendbytes) > 0 {
-			if math.Abs(math.Abs(float64(imudegree))-math.Abs(float64(recvdata.ImuDir))) > IMU_TOOFAST_THRESHOULD {
-				imuError = true
-			}
-		}
-		// 角速度が大幅に超えた場合
-		if imuError && len(sendbytes) > 0 {
-			if sendbytes[9] == 0x00 || sendbytes[9] == 0x01 {
-				//EMGをセット
-				sendbytes[10] = 0x01
-				log.Println("IMU DIFF OVER 35 DEGREE EMG STOPPING..")
-			}
-		}
+		// if len(sendbytes) > 0 {
+		// 	if math.Abs(math.Abs(float64(imudegree))-math.Abs(float64(recvdata.ImuDir))) > IMU_TOOFAST_THRESHOULD {
+		// 		imuError = true
+		// 	}
+		// }
+		// // 角速度が大幅に超えた場合
+		// if imuError && len(sendbytes) > 0 {
+		// 	if sendbytes[9] == 0x00 || sendbytes[9] == 0x01 {
+		// 		//EMGをセット
+		// 		// sendbytes[10] = 0x01
+		// 		log.Println("IMU DIFF OVER 35 DEGREE EMG STOPPING..")
+		// 	}
+		// }
 
-		//imu角度リセットの動作部分
-		if imuReset && len(sendbytes) > 0 {
-			//EMGを解除
-			sendbytes[10] = 0x00
-			//imu角度フラグを2にセット
-			sendbytes[9] = 0x02
-			//imu角度を0にセット
-			sendbytes[8] = 0x00
-			log.Println("IMU RESET")
-		}
 		//前のフレームのimu角度を保持
 		imudegree = recvdata.ImuDir
 
