@@ -1,4 +1,4 @@
-module github.com/Rione/ssl-RACOON-Pi
+module github.com/Rione/ssl-RACOON-Pi2
 
 go 1.17
 

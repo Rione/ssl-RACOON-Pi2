@@ -33,7 +33,6 @@ func RunSerial(chclient chan bool, MyID uint32) {
 	}
 
 	for {
-
 		//受信できるまで読み込む。バイトが0xFF, 0x00, 0xFF, 0x00のときは受信できると判断する
 		buf := make([]byte, 1)
 		recvbuf := make([]byte, 6)

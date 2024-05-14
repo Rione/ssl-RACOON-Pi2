@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"log"
-	"math"
 	"net"
 	"time"
 
-	"github.com/Rione/ssl-RACOON-Pi/proto/pb_gen"
+	"github.com/Rione/ssl-RACOON-Pi2/proto/pb_gen"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -60,54 +59,13 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 				log.Printf("Velangular: %f", Velangular)
 				log.Printf("Spinner   : %t", Spinner)
-				bytearray := SendStruct{}   //送信用構造体
-				Motor := make([]float64, 4) //モータ信号用 Float64
 
-				var Velnormalized float64 = math.Sqrt(math.Pow(Veltangent, 2) + math.Pow(Velnormal, 2))
-
-				if Velnormalized > 1.0 {
-					Velnormalized = 1.0
-				} else if Velnormalized < 0.0 {
-					Velnormalized = 0.0
-				}
-
-				Veltheta := math.Atan2(Veltangent, -Velnormal) - (math.Pi / 2)
-
-				if Veltheta < 0 {
-					Veltheta = Veltheta + 2.0*math.Pi
-				}
-
-				Veltheta = Veltheta * (180 / math.Pi)
-
-				if v.GetWheelsspeed() {
-					Motor[0] = float64(v.GetWheel1())
-					Motor[1] = float64(v.GetWheel2())
-					Motor[2] = float64(v.GetWheel3())
-					Motor[3] = float64(v.GetWheel4())
-				} else {
-					Motor[0] = (math.Sin((Veltheta-45)*(math.Pi/180)) * Velnormalized) * 100
-					Motor[1] = (math.Sin((Veltheta-135)*(math.Pi/180)) * Velnormalized) * 100
-					Motor[2] = (math.Sin((Veltheta-225)*(math.Pi/180)) * Velnormalized) * 100
-					Motor[3] = (math.Sin((Veltheta-315)*(math.Pi/180)) * Velnormalized) * 100
-				}
-
-				//Limit Motor Value
-				for i := 0; i < 4; i++ {
-
-					if Motor[i] > 100 {
-						Motor[i] = 100
-					} else if Motor[i] < -100 {
-						Motor[i] = -100
-					}
-
-					//Plus 100 for uint8
-					Motor[i] = Motor[i] + 100
-				}
+				bytearray := SendStruct{} //送信用構造体
+				bytearray.velx = int16(Veltangent)
+				bytearray.vely = int16(Velnormal)
+				bytearray.velang = int16(Velangular * 1000)
 
 				bytearray.preamble = 0xFF //プリアンブル
-				for i := 0; i < 4; i++ {
-					bytearray.motor[i] = uint8(Motor[i]) // 1-4番のモータへの信号データ
-				}
 
 				if Spinner {
 					bytearray.dribblePower = 100 //ドリブラ情報
@@ -134,110 +92,42 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					bytearray.chipPower = 0 //チップ情報
 				}
 
-				// Velangular radian to degree
-				Velangular_deg := Velangular * (180 / math.Pi)
+				//informationsのemgStopを0にする
+				bytearray.informations = bytearray.informations & 0b01111111
 
-				//Velangular_deg がマイナス値のときは、マイナスであるという情報を付加(imuFlag)
-				if Velangular_deg < 0 {
-					Velangular_deg = Velangular_deg * -1
-					bytearray.imuFlg = 1
-				} else {
-					bytearray.imuFlg = 0
+				//ダイレクトキックならば、doDirectKickを1にする
+				var doDirectKick bool = false
+				if doDirectKick {
+					bytearray.informations = bytearray.informations | 0b01000000
 				}
 
-				if v.GetWheelsspeed() {
-					bytearray.imuFlg = 9 //IMU制御をしない
-					bytearray.imuDir = 0 //IMU情報
+				//ダイレクトチップならば、doDirectChipを1にする
+				var doDirectChipKick bool = false
+				if doDirectChipKick {
+					bytearray.informations = bytearray.informations | 0b00100000
 				}
-				bytearray.imuDir = uint8(Velangular_deg) //IMU情報
-				bytearray.emg = false                    //EMG情報
 
-				//log.Printf("Velnormalized: %f", Velnormalized)
-				//log.Printf("Float64BeforeInt: %f", Motor)
+				//パリティビットを計算
+				parity := byte(0)
+				for i := 0; i < 7; i++ {
+					parity ^= byte(bytearray.velx >> uint(i) & 0x01)
+					parity ^= byte(bytearray.vely >> uint(i) & 0x01)
+					parity ^= byte(bytearray.velang >> uint(i) & 0x01)
+					parity ^= byte(bytearray.dribblePower >> uint(i) & 0x01)
+					parity ^= byte(bytearray.kickPower >> uint(i) & 0x01)
+					parity ^= byte(bytearray.chipPower >> uint(i) & 0x01)
+					parity ^= byte(bytearray.informations >> uint(i) & 0x01)
+				}
+				bytearray.informations = bytearray.informations | (parity << 7)
+
+				//バイナリに変換
+
 				sendarray = bytes.Buffer{}
 				if !imuResetPending {
 					err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
 					if err != nil {
 						log.Fatal(err)
 					}
-				}
-			}
-			//IDが255のときは、モーター動作させず緊急停止フェーズに移行
-			if v.GetId() == 255 {
-				bytearray := SendStruct{} //送信用構造体
-				bytearray.emg = true      // 非常用モード
-				bytearray.preamble = 0xFF //プリアンブル
-				bytearray.motor[0] = 100
-				bytearray.motor[1] = 100
-				bytearray.motor[2] = 100
-				bytearray.motor[3] = 100
-				sendarray = bytes.Buffer{}
-				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
-
-				log.Println("EMERGANCY STOP MODE ACTIVATED")
-
-				if err != nil {
-					log.Fatal(err)
-				}
-			}
-
-			//IMU全体リセット
-			if v.GetId() == 254 {
-				bytearray := SendStruct{} //送信用構造体
-				bytearray.emg = false     // 非常用モード
-				bytearray.imuFlg = 2
-				bytearray.imuDir = 0
-				bytearray.preamble = 0xFF //プリアンブル
-				bytearray.motor[0] = 100
-				bytearray.motor[1] = 100
-				bytearray.motor[2] = 100
-				bytearray.motor[3] = 100
-
-				sendarray = bytes.Buffer{}
-				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
-
-				log.Println("=======IMU RESET=======")
-
-				if err != nil {
-					log.Fatal(err)
-				}
-			}
-
-			//IMU単独リセット
-			if v.GetId() == MyID+100 {
-				bytearray := SendStruct{} //送信用構造体
-				bytearray.emg = false     // 非常用モード
-				bytearray.imuFlg = 3
-
-				Velangular := float64(v.GetVelangular())
-				// Velangular radian to degree
-				Velangular_deg := Velangular * (180 / math.Pi)
-
-				//Velangular_deg がマイナス値のときは、マイナスであるという情報を付加(imuFlag)
-				if Velangular_deg < 0 {
-					Velangular_deg = Velangular_deg * -1
-					bytearray.imuFlg = 3
-				} else {
-					bytearray.imuFlg = 2
-				}
-				bytearray.imuDir = uint8(Velangular_deg) //IMU情報
-
-				bytearray.preamble = 0xFF //プリアンブル
-				bytearray.motor[0] = 100
-				bytearray.motor[1] = 100
-				bytearray.motor[2] = 100
-				bytearray.motor[3] = 100
-
-				sendarray = bytes.Buffer{}
-				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
-
-				log.Println("=======IMU RESET(RESET TO ANGLE)=======")
-
-				//IMU Reset Pending フラグをたてる
-				imuResetPending = true
-
-				if err != nil {
-					log.Fatal(err)
 				}
 			}
 		}

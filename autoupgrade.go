@@ -49,7 +49,7 @@ func confirmAndSelfUpdate() {
 		return
 	}
 
-	latest, found, err := up.DetectLatest("Rione/ssl-RACOON-Pi")
+	latest, found, err := up.DetectLatest("Rione/ssl-RACOON-Pi2")
 	if err != nil {
 		log.Println("Error occurred while detecting version:", err)
 		return
@@ -66,7 +66,7 @@ func confirmAndSelfUpdate() {
 	}
 	log.Println("New version available:", latest.Version)
 
-	latest, err = up.UpdateSelf(v, "Rione/ssl-RACOON-Pi")
+	latest, err = up.UpdateSelf(v, "Rione/ssl-RACOON-Pi2")
 	if err != nil {
 		log.Println("Error occurred while updating binary:", err)
 		return

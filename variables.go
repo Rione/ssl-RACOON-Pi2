@@ -35,16 +35,33 @@ type RecvStruct struct {
 	ImuDir      int16
 }
 
-// 送信時の構造体
+// // 送信時の構造体
+// type SendStruct struct {
+// 	preamble     byte
+// 	motor        [4]uint8
+// 	dribblePower uint8
+// 	kickPower    uint8
+// 	chipPower    uint8
+// 	imuDir       uint8
+// 	imuFlg       uint8
+// 	emg          bool
+// }
+
 type SendStruct struct {
 	preamble     byte
-	motor        [4]uint8
+	velx         int16
+	vely         int16
+	velang       int16
 	dribblePower uint8
 	kickPower    uint8
 	chipPower    uint8
-	imuDir       uint8
-	imuFlg       uint8
-	emg          bool
+	informations uint8
+	// informations の ビット構成
+	// emgStop      bit[0]
+	// doDirectKick bit[1]
+	// doDirectChip bit[2]
+	// 〜bit[3] ~ bit[6] Reserved〜
+	// parity       bit[7] //velx から bit[6] までのパリティビット（偶数なら1）
 }
 
 // 受信データ構造体
