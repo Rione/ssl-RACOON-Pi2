@@ -29,33 +29,24 @@ var sendarray bytes.Buffer //送信用バッファ
 
 // 受信時の構造体
 type RecvStruct struct {
-	Volt        uint8
-	PhotoSensor uint16
-	IsHoldBall  bool
-	ImuDir      int16
+	Volt       uint8
+	IsHoldBall bool
 }
 
-// // 送信時の構造体
-// type SendStruct struct {
-// 	preamble     byte
-// 	motor        [4]uint8
-// 	dribblePower uint8
-// 	kickPower    uint8
-// 	chipPower    uint8
-// 	imuDir       uint8
-// 	imuFlg       uint8
-// 	emg          bool
-// }
-
 type SendStruct struct {
-	preamble     byte
-	velx         int16
-	vely         int16
-	velang       int16
-	dribblePower uint8
-	kickPower    uint8
-	chipPower    uint8
-	informations uint8
+	preamble      byte
+	velx          int16
+	vely          int16
+	velang        int16
+	dribblePower  uint8
+	kickPower     uint8
+	chipPower     uint8
+	relativeX     int16 //(mm)
+	relativeY     int16 //(mm)
+	relativeTheta int16 //(mrad)
+	cameraBallX   uint8
+	cameraBallY   uint8
+	informations  uint8
 	// informations の ビット構成
 	// emgStop      bit[0]
 	// doDirectKick bit[1]

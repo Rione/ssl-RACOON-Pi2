@@ -60,10 +60,10 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				log.Printf("Velangular: %f", Velangular)
 				log.Printf("Spinner   : %t", Spinner)
 
-				bytearray := SendStruct{} //送信用構造体
-				bytearray.velx = int16(Veltangent)
-				bytearray.vely = int16(Velnormal)
-				bytearray.velang = int16(Velangular * 1000)
+				bytearray := SendStruct{}                   //送信用構造体
+				bytearray.velx = int16(Veltangent)          //m/s
+				bytearray.vely = int16(Velnormal)           //m/s
+				bytearray.velang = int16(Velangular * 1000) // mrad/sに変換
 
 				bytearray.preamble = 0xFF //プリアンブル
 
@@ -91,6 +91,15 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				} else {
 					bytearray.chipPower = 0 //チップ情報
 				}
+
+				//相対位置情報
+				bytearray.relativeX = 0
+				bytearray.relativeY = 0
+				bytearray.relativeTheta = 0
+
+				//カメラ情報
+				bytearray.cameraBallX = 0
+				bytearray.cameraBallY = 0
 
 				//informationsのemgStopを0にする
 				bytearray.informations = bytearray.informations & 0b01111111
@@ -121,7 +130,6 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				bytearray.informations = bytearray.informations | (parity << 7)
 
 				//バイナリに変換
-
 				sendarray = bytes.Buffer{}
 				if !imuResetPending {
 					err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換

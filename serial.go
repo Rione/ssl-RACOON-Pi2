@@ -67,33 +67,6 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		/// エラーチェック部分
 		///
 		//////////////////////////////////
-		//ボールセンサーが低いときにカウントを増やす
-		if recvdata.PhotoSensor < uint16(BALLSENS_LOW_THRESHOULD) {
-			ballSensLowCount++
-		} else {
-			ballSensLowCount = 0
-		}
-
-		//ボールセンサーが低いときにカウントが一定値(10s)を超えたらエラー
-		if ballSensLowCount > 600 {
-			isRobotError = true
-			RobotErrorCode = 1
-			RobotErrorMessage = "ボールセンサ異常"
-		}
-
-		// //ボールセンサの値が極端に高いときはエラー
-		// if recvdata.PhotoSensor > uint16(BALLSENS_HBREAK_THRESHOULD) {
-		// 	isRobotError = true
-		// 	RobotErrorCode = 1
-		// 	RobotErrorMessage = "ボールセンサ異常(回路故障の可能性)"
-		// }
-
-		//ボールセンサの値が極端に低いときはエラー
-		if recvdata.PhotoSensor < uint16(BALLSENS_LBREAK_THRESHOULD) {
-			isRobotError = true
-			RobotErrorCode = 1
-			RobotErrorMessage = "ボールセンサ異常(回路故障の可能性)"
-		}
 
 		//バッテリの電圧が一定量を下回ったらエラー
 		if recvdata.Volt < uint8(BATTERY_LOW_THRESHOULD) {
@@ -120,7 +93,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		//バイト列がなかったら（初回受け取りを行っていない場合）、初期値を設定
 		if len(sendbytes) <= 0 {
-			sendbytes = []byte{0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+			sendbytes = []byte{0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 		}
 
 		//受信しなかった場合に自動的にモーターOFFする
@@ -139,25 +112,6 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		//それぞれのデータを表示
 		// log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
-
-		//高速回転防止機能
-		//フレームごとの角度が閾値を超えると, EMGをセットする
-		// if len(sendbytes) > 0 {
-		// 	if math.Abs(math.Abs(float64(imudegree))-math.Abs(float64(recvdata.ImuDir))) > IMU_TOOFAST_THRESHOULD {
-		// 		imuError = true
-		// 	}
-		// }
-		// // 角速度が大幅に超えた場合
-		// if imuError && len(sendbytes) > 0 {
-		// 	if sendbytes[9] == 0x00 || sendbytes[9] == 0x01 {
-		// 		//EMGをセット
-		// 		// sendbytes[10] = 0x01
-		// 		log.Println("IMU DIFF OVER 35 DEGREE EMG STOPPING..")
-		// 	}
-		// }
-
-		//前のフレームのimu角度を保持
-		imudegree = recvdata.ImuDir
 
 		port.Write(sendbytes)             //書き込み
 		time.Sleep(16 * time.Millisecond) //少し待つ

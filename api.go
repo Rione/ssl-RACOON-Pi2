@@ -127,13 +127,11 @@ func HandleRequest(conn net.Conn) {
 	// JSON形式で返す
 	response := fmt.Sprintf(`{
 		"VOLT": %f,
-		"PHOTOSENSOR": %d,
 		"ISHOLDBALL": %t,
-		"IMUDIR": %d,
 		"ERROR": %t,
 		"ERRORCODE": %d,
 		"ERRORMESSAGE": "%s"
-	}`, float32(recvdata.Volt)/10.0, recvdata.PhotoSensor, recvdata.IsHoldBall, recvdata.ImuDir, isRobotError, RobotErrorCode, RobotErrorMessage)
+	}`, float32(recvdata.Volt)/10.0, recvdata.IsHoldBall, isRobotError, RobotErrorCode, RobotErrorMessage)
 
 	fmt.Fprint(conn, response)
 
