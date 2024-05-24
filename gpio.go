@@ -35,7 +35,7 @@ func RunGPIO(chgpio chan bool) {
 	button2.PullUp()
 
 	//GPIO12をブザーPWMに設定。出力
-	buzzer := rpio.Pin(12)
+	buzzer := rpio.Pin(13)
 	buzzer.Mode(rpio.Pwm)
 	buzzer.Freq(64000)
 	buzzer.DutyCycle(0, 32)
@@ -60,10 +60,10 @@ func RunGPIO(chgpio chan bool) {
 	buzzer.DutyCycle(0, 32)
 
 	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
-	dip1 := rpio.Pin(6)
+	dip1 := rpio.Pin(25)
 	dip1.Input()
 	dip1.PullUp()
-	dip2 := rpio.Pin(25)
+	dip2 := rpio.Pin(6)
 	dip2.Input()
 	dip2.PullUp()
 	dip3 := rpio.Pin(4)
