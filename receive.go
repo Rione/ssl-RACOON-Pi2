@@ -61,8 +61,8 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				log.Printf("Spinner   : %t", Spinner)
 
 				bytearray := SendStruct{}                   //送信用構造体
-				bytearray.velx = int16(Veltangent)          //m/s
-				bytearray.vely = int16(Velnormal)           //m/s
+				bytearray.velx = int16(Veltangent * 1000)          //m/s
+				bytearray.vely = int16(Velnormal * 1000)           //m/s
 				bytearray.velang = int16(Velangular * 1000) // mrad/sに変換
 
 				bytearray.preamble = 0xFF //プリアンブル

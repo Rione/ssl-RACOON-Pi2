@@ -116,7 +116,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		}
 
 		//受信しなかった場合に自動的にモーターOFFする
-		if time.Since(last_recv_time) > 15*time.Second {
+		if time.Since(last_recv_time) > 1*time.Second {
 			// log.Println("No Data Recv")
 			for i := 1; i <= 6; i++ {
 				sendbytes[i] = 0
