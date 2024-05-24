@@ -131,11 +131,9 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 				//バイナリに変換
 				sendarray = bytes.Buffer{}
-				if !imuResetPending {
-					err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
-					if err != nil {
-						log.Fatal(err)
-					}
+				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
+				if err != nil {
+					log.Fatal(err)
 				}
 			}
 		}

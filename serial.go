@@ -84,10 +84,6 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			// isRobotEmgError = true //緊急停止
 		}
 
-		//TODO: Pendingをfalseにした瞬間にAIが受信し始める。Mutex必要か？
-		if imuResetPending {
-			imuResetPending = false
-		}
 		//クライアントで受け取ったデータをバイト列に変更
 		sendbytes := sendarray.Bytes()
 

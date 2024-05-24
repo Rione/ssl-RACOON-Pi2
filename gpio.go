@@ -112,16 +112,14 @@ func RunGPIO(chgpio chan bool) {
 			}
 		} else {
 			//通常チカチカ。ボタンが押されたら高速チカチカ
-			//ボタンが押されたら、imuをリセットする
+			//button2はkickボタン
 			buzzer.Freq(1479 * 64)
 			time.Sleep(ledsec)
 			led.Write(rpio.High)
 			if button1.Read()^1 == rpio.High {
-				imuReset = true
 				ledsec = 100 * time.Millisecond
 				buzzer.DutyCycle(16, 32)
 			} else {
-				imuReset = false
 				ledsec = 500 * time.Millisecond
 			}
 			if button2.Read()^1 == rpio.High {
