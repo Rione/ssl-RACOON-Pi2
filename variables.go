@@ -12,8 +12,8 @@ const BAUDRATE int = 460800
 const SERIAL_PORT_NAME string = "/dev/serial0"
 
 // バッテリーの低下しきい値。 150 = 15.0V
-const BATTERY_LOW_THRESHOULD int = 150
-const BATTERY_CRITICAL_THRESHOULD int = 145
+const BATTERY_LOW_THRESHOULD int = 145
+const BATTERY_CRITICAL_THRESHOULD int = 140
 
 var sendarray bytes.Buffer //送信用バッファ
 

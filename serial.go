@@ -30,11 +30,12 @@ func RunSerial(chclient chan bool, MyID uint32) {
 	if err := port.SetMode(mode); err != nil {
 		log.Fatal(err)
 	}
+	last_recv_time = time.Now()
 
 	for {
 		//受信できるまで読み込む。バイトが0xFF, 0x00, 0xFF, 0x00のときは受信できると判断する
 		buf := make([]byte, 1)
-		recvbuf := make([]byte, 6)
+		recvbuf := make([]byte, 2)
 		//ここで受信バッファをクリアする
 		port.ResetInputBuffer()
 		for {
@@ -47,7 +48,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 						port.Read(buf) //読み込み
 						if bytes.Equal(buf, []byte{0x00}) {
 							//合計6バイト
-							for i := 0; i < 6; i++ {
+							for i := 0; i < 2; i++ {
 								port.Read(buf)      //読み込み
 								recvbuf[i] = buf[0] //受信データを格納
 							}
@@ -57,7 +58,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 				}
 			}
 		}
-
+		log.Println(recvbuf)
 		//バイナリから構造体に変換
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
@@ -84,6 +85,28 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			// isRobotEmgError = true //緊急停止
 		}
 
+		// bytearray := SendStruct{}
+
+		// bytearray.preamble = 0xFF
+		// bytearray.velx = 0
+		// bytearray.vely = 0
+		// bytearray.velang = 0
+		// bytearray.dribblePower = 0
+		// bytearray.kickPower = 0
+		// bytearray.chipPower = 0
+		// bytearray.relativeX = 0
+		// bytearray.relativeY = 0
+		// bytearray.relativeTheta = 0
+		// bytearray.cameraBallX = 0
+		// bytearray.cameraBallY = 0
+		// bytearray.informations = 0
+
+		// sendarray = bytes.Buffer{}
+		// err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+
 		//クライアントで受け取ったデータをバイト列に変更
 		sendbytes := sendarray.Bytes()
 
@@ -93,7 +116,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		}
 
 		//受信しなかった場合に自動的にモーターOFFする
-		if time.Since(last_recv_time) > 1*time.Second {
+		if time.Since(last_recv_time) > 15*time.Second {
 			// log.Println("No Data Recv")
 			for i := 1; i <= 6; i++ {
 				sendbytes[i] = 0
@@ -112,7 +135,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		port.Write(sendbytes)             //書き込み
 		time.Sleep(16 * time.Millisecond) //少し待つ
 		//log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
-		// log.Println(sendbytes) //送信済みのバイトを表示
+		log.Println(sendbytes) //送信済みのバイトを表示
 
 		//100ナノ秒待つ
 		// time.Sleep(100 * time.Nanosecond)

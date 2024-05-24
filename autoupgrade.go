@@ -19,9 +19,11 @@ func getVersion() string {
 		return version
 	}
 	i, ok := debug.ReadBuildInfo()
+	log.Println(debug.ReadBuildInfo())
 	if !ok {
 		return "unknown"
 	}
+	log.Println(i.Main.Version)
 	return i.Main.Version
 }
 

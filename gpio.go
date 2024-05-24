@@ -60,10 +60,10 @@ func RunGPIO(chgpio chan bool) {
 	buzzer.DutyCycle(0, 32)
 
 	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
-	dip1 := rpio.Pin(5)
+	dip1 := rpio.Pin(4)
 	dip1.Input()
 	dip1.PullUp()
-	dip2 := rpio.Pin(4)
+	dip2 := rpio.Pin(5)
 	dip2.Input()
 	dip2.PullUp()
 	dip3 := rpio.Pin(6)
@@ -123,12 +123,13 @@ func RunGPIO(chgpio chan bool) {
 				ledsec = 500 * time.Millisecond
 			}
 			if button2.Read()^1 == rpio.High {
+				//log.Println(button2.Read())
 				//kickする
-				buzzer.DutyCycle(16, 32)
-				time.Sleep(500 * time.Millisecond)
-				buzzer.DutyCycle(0, 32)
-				kicker_enable = true
-				kicker_val = 100
+				//buzzer.DutyCycle(16, 32)
+				//time.Sleep(500 * time.Millisecond)
+				//buzzer.DutyCycle(0, 32)
+				//kicker_enable = true
+				//kicker_val = 100
 			}
 			time.Sleep(ledsec)
 			led.Write(rpio.Low)

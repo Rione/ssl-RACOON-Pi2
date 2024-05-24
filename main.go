@@ -53,16 +53,16 @@ func main() {
 	defer rpio.Close()
 
 	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
-	dip1 := rpio.Pin(6)
+	dip1 := rpio.Pin(4)
 	dip1.Input()
 	dip1.PullUp()
-	dip2 := rpio.Pin(25)
+	dip2 := rpio.Pin(5)
 	dip2.Input()
 	dip2.PullUp()
-	dip3 := rpio.Pin(4)
+	dip3 := rpio.Pin(6)
 	dip3.Input()
 	dip3.PullUp()
-	dip4 := rpio.Pin(5)
+	dip4 := rpio.Pin(25)
 	dip4.Input()
 	dip4.PullUp()
 
