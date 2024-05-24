@@ -6,7 +6,7 @@ import (
 )
 
 // ボーレート
-const BAUDRATE int = 460800
+const BAUDRATE int = 230400
 
 // シリアルポート名 ラズパイ4の場合、"/dev/serial0"
 const SERIAL_PORT_NAME string = "/dev/serial0"
