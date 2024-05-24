@@ -119,6 +119,6 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		// log.Println(sendbytes) //送信済みのバイトを表示
 
 		//100ナノ秒待つ
-		time.Sleep(100 * time.Nanosecond)
+		// time.Sleep(100 * time.Nanosecond)
 	}
 }
