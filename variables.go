@@ -38,11 +38,13 @@ type SendStruct struct {
 	cameraBallY   uint8
 	informations  uint8
 	// informations の ビット構成
-	// emgStop      bit[0]
-	// doDirectKick bit[1]
-	// doDirectChip bit[2]
-	// 〜bit[3] ~ bit[6] Reserved〜
-	// parity       bit[7] //velx から bit[6] までのパリティビット（偶数なら1）
+	// emgStop          bit[0]
+	// doDirectKick     bit[1]
+	// doDirectChip     bit[2]
+	// 〜bit[3] ~ bit[4] Reserved〜
+	// isSignalReceived bit[5] //Controllerから信号を受け取っているかどうか
+	// isCtrlByRobot    bit[6] //ロボットからの位置制御を実行するかどうか
+	// parity           bit[7] //velx から bit[6] までのパリティビット（偶数なら1）
 }
 
 // 受信データ構造体
