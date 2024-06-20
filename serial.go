@@ -123,7 +123,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			}
 
 			//informations ビットの 5 番目を 1 にする
-			sendbytes[19] = 0b00100000
+			sendbytes[18] = 0b00100000
 		}
 
 		if kicker_enable {
