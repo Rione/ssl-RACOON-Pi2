@@ -50,7 +50,6 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	defer rpio.Close()
 
 	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
 	dip1 := rpio.Pin(4)
@@ -67,6 +66,11 @@ func main() {
 	dip4.PullUp()
 
 	// HEXの値を表示
+	// DIP1, 2, 3 ,4 の状態を出力
+	fmt.Println("DIP1:", dip1.Read()^1)
+	fmt.Println("DIP2:", dip2.Read()^1)
+	fmt.Println("DIP3:", dip3.Read()^1)
+	fmt.Println("DIP4:", dip4.Read()^1)
 	hex := dip1.Read() ^ 1 + (dip2.Read()^1)*2 + (dip3.Read()^1)*4 + (dip4.Read()^1)*8
 	fmt.Println("GOT ID FROM DIP SW:", int(hex))
 	diptoid := int(hex)
