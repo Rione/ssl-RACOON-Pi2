@@ -118,7 +118,8 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		//受信しなかった場合に自動的にモーターOFFする
 		if time.Since(last_recv_time) > 1*time.Second {
 			// log.Println("No Data Recv")
-			for i := 1; i <= 6; i++ {
+			// disable velocity, dribble, kick
+			for i := 1; i <= 9; i++ {
 				sendbytes[i] = 0
 			}
 
@@ -126,7 +127,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			//sendbytes[18] = 0b00100000
 		} else {
 			sendbytes[18] = sendbytes[18] | 0b00100000
-  }
+		}
 
 		if kicker_enable {
 			sendbytes[8] = kicker_val
