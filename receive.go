@@ -63,6 +63,18 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				Velnormal := float64(v.GetVelnormal())
 				Velangular := float64(v.GetVelangular())
 				Spinner := v.GetSpinner()
+
+				var SpinnerVel float32 = 0
+				if Spinner {
+					SpinnerVel = v.GetWheel1()
+					if SpinnerVel > 100 {
+						SpinnerVel = 100
+					} else if SpinnerVel < 0 {
+						SpinnerVel = 0
+					}
+					// log.Printf("SpinnerVel: %f", SpinnerVel)
+				}
+
 				log.Printf("ID        : %d", Id)
 				log.Printf("Kickspeedx: %f", Kickspeedx)
 				log.Printf("Kickspeedz: %f", Kickspeedz)
@@ -80,7 +92,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				bytearray.preamble = 0xFF //プリアンブル
 
 				if Spinner {
-					bytearray.dribblePower = 100 //ドリブラ情報
+					bytearray.dribblePower = uint8(SpinnerVel) //ドリブラ情報
 				} else {
 					bytearray.dribblePower = 0 //ドリブラ情報
 				}
