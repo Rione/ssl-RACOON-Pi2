@@ -46,7 +46,19 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 			if v.GetId() == MyID {
 				Id := v.GetId()
 				Kickspeedx := v.GetKickspeedx()
+				if Kickspeedx > 100 {
+					doDirectKick = true
+					Kickspeedx -= 100
+				} else {
+					doDirectKick = false
+				}
 				Kickspeedz := v.GetKickspeedz()
+				if Kickspeedz > 100 {
+					doDirectChipKick = true
+					Kickspeedz -= 100
+				} else {
+					doDirectChipKick = false
+				}
 				Veltangent := float64(v.GetVeltangent())
 				Velnormal := float64(v.GetVelnormal())
 				Velangular := float64(v.GetVelangular())
@@ -61,8 +73,8 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				log.Printf("Spinner   : %t", Spinner)
 
 				bytearray := SendStruct{}                   //送信用構造体
-				bytearray.velx = int16(Veltangent * 1000)          //m/s
-				bytearray.vely = int16(Velnormal * 1000)           //m/s
+				bytearray.velx = int16(Veltangent * 1000)   //m/s
+				bytearray.vely = int16(Velnormal * 1000)    //m/s
 				bytearray.velang = int16(Velangular * 1000) // mrad/sに変換
 
 				bytearray.preamble = 0xFF //プリアンブル
@@ -105,13 +117,11 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				bytearray.informations = bytearray.informations & 0b01111111
 
 				//ダイレクトキックならば、doDirectKickを1にする
-				var doDirectKick bool = false
 				if doDirectKick {
 					bytearray.informations = bytearray.informations | 0b01000000
 				}
 
-				//ダイレクトチップならば、doDirectChipを1にする
-				var doDirectChipKick bool = false
+				//ダイレクトチップならば、doDirectChipKickを1にする
 				if doDirectChipKick {
 					bytearray.informations = bytearray.informations | 0b00100000
 				}

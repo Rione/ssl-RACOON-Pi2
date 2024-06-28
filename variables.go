@@ -73,3 +73,6 @@ var kicker_enable bool = false //キッカーの入力のON OFFを定義する
 var kicker_val uint8 = 0       //キッカーの値
 var chip_enable bool = false   //チップキックの入力のON OFFを定義する
 var chip_val uint8 = 0         //チップキックの値
+
+var doDirectChipKick bool = false
+var doDirectKick bool = false
