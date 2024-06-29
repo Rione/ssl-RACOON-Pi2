@@ -46,14 +46,14 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 			if v.GetId() == MyID {
 				Id := v.GetId()
 				Kickspeedx := v.GetKickspeedx()
-				if Kickspeedx > 100 {
+				if Kickspeedx >= 100 {
 					doDirectKick = true
 					Kickspeedx -= 100
 				} else {
 					doDirectKick = false
 				}
 				Kickspeedz := v.GetKickspeedz()
-				if Kickspeedz > 100 {
+				if Kickspeedz >= 100 {
 					doDirectChipKick = true
 					Kickspeedz -= 100
 				} else {
