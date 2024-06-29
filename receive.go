@@ -72,7 +72,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					} else if SpinnerVel < 0 {
 						SpinnerVel = 0
 					}
-					// log.Printf("SpinnerVel: %f", SpinnerVel)
+					log.Printf("SpinnerVel: %f", SpinnerVel)
 				}
 
 				log.Printf("ID        : %d", Id)
@@ -126,30 +126,30 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				bytearray.cameraBallY = 0
 
 				//informationsのemgStopを0にする
-				bytearray.informations = bytearray.informations & 0b01111111
+				bytearray.informations = bytearray.informations & 0b11111110
 
 				//ダイレクトキックならば、doDirectKickを1にする
 				if doDirectKick {
-					bytearray.informations = bytearray.informations | 0b01000000
+					bytearray.informations = bytearray.informations | 0b00000010
 				}
 
 				//ダイレクトチップならば、doDirectChipKickを1にする
 				if doDirectChipKick {
-					bytearray.informations = bytearray.informations | 0b00100000
+					bytearray.informations = bytearray.informations | 0b00000100
 				}
 
-				//パリティビットを計算
-				parity := byte(0)
-				for i := 0; i < 7; i++ {
-					parity ^= byte(bytearray.velx >> uint(i) & 0x01)
-					parity ^= byte(bytearray.vely >> uint(i) & 0x01)
-					parity ^= byte(bytearray.velang >> uint(i) & 0x01)
-					parity ^= byte(bytearray.dribblePower >> uint(i) & 0x01)
-					parity ^= byte(bytearray.kickPower >> uint(i) & 0x01)
-					parity ^= byte(bytearray.chipPower >> uint(i) & 0x01)
-					parity ^= byte(bytearray.informations >> uint(i) & 0x01)
-				}
-				bytearray.informations = bytearray.informations | (parity << 7)
+				// //パリティビットを計算
+				// parity := byte(0)
+				// for i := 0; i < 7; i++ {
+				// 	parity ^= byte(bytearray.velx >> uint(i) & 0x01)
+				// 	parity ^= byte(bytearray.vely >> uint(i) & 0x01)
+				// 	parity ^= byte(bytearray.velang >> uint(i) & 0x01)
+				// 	parity ^= byte(bytearray.dribblePower >> uint(i) & 0x01)
+				// 	parity ^= byte(bytearray.kickPower >> uint(i) & 0x01)
+				// 	parity ^= byte(bytearray.chipPower >> uint(i) & 0x01)
+				// 	parity ^= byte(bytearray.informations >> uint(i) & 0x01)
+				// }
+				// bytearray.informations = bytearray.informations | (parity << 7)
 
 				//バイナリに変換
 				sendarray = bytes.Buffer{}
