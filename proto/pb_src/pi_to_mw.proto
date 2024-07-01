@@ -7,8 +7,8 @@ message Robots_Status{
 }
 
 message Robot_Status {
-  required int32 robot_id  = 1;
+  required uint32 robot_id  = 1;
   required bool infrared   = 2;
-  required bool flat_kick  = 3;
-  required bool chip_kick  = 4;
+  required uint32 battery_voltage  = 3;
+  required uint32 cap_power  = 4;
 }

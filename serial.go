@@ -35,7 +35,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 	for {
 		//受信できるまで読み込む。バイトが0xFF, 0x00, 0xFF, 0x00のときは受信できると判断する
 		buf := make([]byte, 1)
-		recvbuf := make([]byte, 2)
+		recvbuf := make([]byte, 3)
 		//ここで受信バッファをクリアする
 		port.ResetInputBuffer()
 		for {
@@ -47,8 +47,8 @@ func RunSerial(chclient chan bool, MyID uint32) {
 					if bytes.Equal(buf, []byte{0xFF}) {
 						port.Read(buf) //読み込み
 						if bytes.Equal(buf, []byte{0x00}) {
-							//合計6バイト
-							for i := 0; i < 2; i++ {
+							//合計 3バイト
+							for i := 0; i < 3; i++ {
 								port.Read(buf)      //読み込み
 								recvbuf[i] = buf[0] //受信データを格納
 							}
