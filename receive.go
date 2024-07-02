@@ -138,6 +138,12 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					bytearray.informations = bytearray.informations | 0b00000100
 				}
 
+				// 充電を行う
+				var doCharge bool = true
+				if doCharge {
+					bytearray.informations = bytearray.informations | 0b00010000
+				}
+
 				// //パリティビットを計算
 				// parity := byte(0)
 				// for i := 0; i < 7; i++ {
