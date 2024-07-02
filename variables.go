@@ -21,6 +21,7 @@ var sendarray bytes.Buffer //送信用バッファ
 type RecvStruct struct {
 	Volt       uint8
 	IsHoldBall bool
+	CapPower   uint8
 }
 
 type SendStruct struct {
@@ -31,9 +32,9 @@ type SendStruct struct {
 	dribblePower  uint8
 	kickPower     uint8
 	chipPower     uint8
-	relativeX     int16 //(mm)
-	relativeY     int16 //(mm)
-	relativeTheta int16 //(mrad)
+	relativeX     int16 // (mm)
+	relativeY     int16 // (mm)
+	relativeTheta int16 // (mrad)
 	cameraBallX   uint8
 	cameraBallY   uint8
 	informations  uint8

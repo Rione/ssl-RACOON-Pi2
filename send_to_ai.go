@@ -9,10 +9,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func createStatus(robotid int32, infrared bool, flatkick bool, chipkick bool) *pb_gen.Robot_Status {
-	//grSimとの互換性を確保するために用意。
+func createStatus(robotid uint32, infrared bool, batt uint32, cappower uint32) *pb_gen.Robot_Status {
 	pe := &pb_gen.Robot_Status{
-		RobotId: &robotid, Infrared: &infrared, FlatKick: &flatkick, ChipKick: &chipkick,
+		RobotId: &robotid, Infrared: &infrared, BatteryVoltage: &batt, CapPower: &cappower,
 	}
 
 	return pe
@@ -30,8 +29,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 	defer conn.Close()
 
 	for {
-		// log.Println(recvdata.IsHoldBall)
-		pe := createStatus(int32(MyID), recvdata.IsHoldBall, false, false)
+		pe := createStatus(uint32(MyID), recvdata.IsHoldBall, uint32(recvdata.Volt), uint32(recvdata.CapPower))
 		Data, _ := proto.Marshal(pe)
 
 		conn.Write([]byte(Data))
