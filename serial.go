@@ -124,7 +124,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			}
 
 			//informations ビットの 5 番目を 1 にする
-			// sendbytes[18] = 0b00100000
+			sendbytes[18] = sendbytes[18] & 0b11011111
 		} else {
 			sendbytes[18] = sendbytes[18] | 0b00100000
 		}
