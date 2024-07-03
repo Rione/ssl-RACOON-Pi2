@@ -10,6 +10,9 @@ import (
 )
 
 // シリアル通信部分
+var isReceived bool = false
+var pre_isReceived bool = false
+
 func RunSerial(chclient chan bool, MyID uint32) {
 	port, err := serial.Open(SERIAL_PORT_NAME, &serial.Mode{})
 	if err != nil {
@@ -124,11 +127,23 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			}
 
 			//informations ビットの 5 番目を 0 にする
-			//informations ビットの 4 番目を 0 にする
 			sendbytes[18] = sendbytes[18] & 0b11011111
-			sendbytes[18] = sendbytes[18] & 0b11101111
+			isReceived = false
 		} else {
 			sendbytes[18] = sendbytes[18] | 0b00100000
+			isReceived = true
+		}
+
+		if time.Since(last_recv_time) > 15*time.Second {
+			//informations ビットの 4 番目を 0 にする
+			sendbytes[18] = sendbytes[18] & 0b11101111
+		}
+
+		if !isReceived && pre_isReceived {
+			log.Println("No Data Recv")
+			doBuzzer = true
+			buzzerTone = 14
+			buzzerTime = 100 * time.Millisecond
 		}
 
 		if kicker_enable {
@@ -144,6 +159,8 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		time.Sleep(16 * time.Millisecond) //少し待つ
 		//log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
 		log.Println(sendbytes) //送信済みのバイトを表示
+
+		pre_isReceived = isReceived
 
 		//100ナノ秒待つ
 		// time.Sleep(100 * time.Nanosecond)
