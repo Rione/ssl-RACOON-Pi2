@@ -143,7 +143,13 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			log.Println("No Data Recv")
 			doBuzzer = true
 			buzzerTone = 14
-			buzzerTime = 100 * time.Millisecond
+			buzzerTime = 1000 * time.Millisecond
+		}
+
+		if isReceived && !pre_isReceived {
+			doBuzzer = true
+			buzzerTone = 12
+			buzzerTime = 500 * time.Millisecond
 		}
 
 		if kicker_enable {
@@ -155,8 +161,9 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		//それぞれのデータを表示
 		// log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
 
-		port.Write(sendbytes)             //書き込み
-		time.Sleep(16 * time.Millisecond) //少し待つ
+		port.Write(sendbytes) //書き込み
+		//これいる？？↓
+		// time.Sleep(16 * time.Millisecond) //少し待つ
 		//log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
 		log.Println(sendbytes) //送信済みのバイトを表示
 
