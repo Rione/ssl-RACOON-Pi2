@@ -163,7 +163,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		port.Write(sendbytes) //書き込み
 		//これいる？？↓
-		// time.Sleep(16 * time.Millisecond) //少し待つ
+		time.Sleep(16 * time.Millisecond) //少し待つ
 		//log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
 		log.Println(sendbytes) //送信済みのバイトを表示
 
