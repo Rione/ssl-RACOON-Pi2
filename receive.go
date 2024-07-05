@@ -76,8 +76,8 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				}
 
 				log.Printf("ID        : %d", Id)
-				log.Printf("Kickspeedx: %f", Kickspeedx)
-				log.Printf("Kickspeedz: %f", Kickspeedz)
+				log.Printf("Kickspeedx: %f", v.GetKickspeedx())
+				log.Printf("Kickspeedz: %f", v.GetKickspeedz())
 				log.Printf("Veltangent: %f", Veltangent)
 				log.Printf("Velnormal : %f", Velnormal)
 
