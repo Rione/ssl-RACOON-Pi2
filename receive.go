@@ -49,15 +49,11 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				if Kickspeedx >= 100 {
 					doDirectKick = true
 					Kickspeedx -= 100
-				} else {
-					doDirectKick = false
 				}
 				Kickspeedz := v.GetKickspeedz()
 				if Kickspeedz >= 100 {
 					doDirectChipKick = true
 					Kickspeedz -= 100
-				} else {
-					doDirectChipKick = false
 				}
 				Veltangent := float64(v.GetVeltangent())
 				Velnormal := float64(v.GetVelnormal())

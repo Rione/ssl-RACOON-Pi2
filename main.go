@@ -23,6 +23,7 @@ func kickCheck(chkicker chan bool) {
 			//ストレートキックをオフにし、値を0にする
 			kicker_enable = false
 			kicker_val = 0
+			doDirectKick = false
 		}
 		//チップキックが入力されたとき
 		if chip_enable {
@@ -31,6 +32,7 @@ func kickCheck(chkicker chan bool) {
 			//チップキックをオフにし、値を0にする
 			chip_enable = false
 			chip_val = 0
+			doDirectChipKick = false
 		}
 		if imuError {
 			time.Sleep(500 * time.Millisecond)
