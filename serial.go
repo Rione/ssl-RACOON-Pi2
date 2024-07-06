@@ -166,10 +166,10 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		// time.Sleep(16 * time.Millisecond) //少し待つ
 		//log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
 		if kicker_enable || sendbytes[8] != 0 {
-			log.Printf("Kickerval: %3d | sendbytes[8]: %3d\n", kicker_val, sendbytes[8])
+			log.Printf("Kickerval: %3d | sendbytes[8]: %3d | ball_detect: %t\n", kicker_val, sendbytes[8], recvdata.IsHoldBall)
 		}
 		if chip_enable || sendbytes[9] != 0 {
-			log.Printf("Chipval: %3d | sendbytes[9]: %3d\n", chip_val, sendbytes[9])
+			log.Printf("Chipval: %3d | sendbytes[9]: %3d |  ball_detect: %t\n", chip_val, sendbytes[9], recvdata.IsHoldBall)
 		}
 		// log.Println(sendbytes) //送信済みのバイトを表示
 
