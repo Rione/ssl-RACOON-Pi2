@@ -61,7 +61,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 				}
 			}
 		}
-		log.Println(recvbuf)
+		// log.Println(recvbuf)
 		//バイナリから構造体に変換
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
@@ -163,9 +163,15 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		port.Write(sendbytes) //書き込み
 		//これいる？？↓
-		time.Sleep(16 * time.Millisecond) //少し待つ
+		// time.Sleep(16 * time.Millisecond) //少し待つ
 		//log.Printf("Sent %v bytes\n", n)  //何バイト送信した？
-		log.Println(sendbytes) //送信済みのバイトを表示
+		if kicker_enable || sendbytes[8] != 0 {
+			log.Printf("Kickerval: %3d | sendbytes[8]: %3d\n", kicker_val, sendbytes[8])
+		}
+		if chip_enable || sendbytes[9] != 0 {
+			log.Printf("Chipval: %3d | sendbytes[9]: %3d\n", chip_val, sendbytes[9])
+		}
+		// log.Println(sendbytes) //送信済みのバイトを表示
 
 		pre_isReceived = isReceived
 

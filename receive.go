@@ -26,7 +26,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 	buf := make([]byte, 1024)
 
 	for {
-		n, addr, _ := serverConn.ReadFromUDP(buf)
+		n, _, _ := serverConn.ReadFromUDP(buf)
 		last_recv_time = time.Now()
 		packet := &pb_gen.GrSim_Packet{}
 		err = proto.Unmarshal(buf[0:n], packet)
@@ -36,12 +36,12 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 		}
 
 		//受信元表示
-		log.Printf("Data received from %s", addr)
+		// log.Printf("Data received from %s", addr)
 
 		robotcmd := packet.Commands.GetRobotCommands()
 
 		for _, v := range robotcmd {
-			log.Printf("%d\n", int(v.GetId()))
+			// log.Printf("%d\n", int(v.GetId()))
 			//ロボットIDが自分のIDと一致したら、受信した情報を反映する
 			if v.GetId() == MyID {
 				Id := v.GetId()
@@ -68,17 +68,19 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 					} else if SpinnerVel < 0 {
 						SpinnerVel = 0
 					}
-					log.Printf("SpinnerVel: %f", SpinnerVel)
+					// log.Printf("SpinnerVel: %f", SpinnerVel)
 				}
 
-				log.Printf("ID        : %d", Id)
-				log.Printf("Kickspeedx: %f", v.GetKickspeedx())
-				log.Printf("Kickspeedz: %f", v.GetKickspeedz())
-				log.Printf("Veltangent: %f", Veltangent)
-				log.Printf("Velnormal : %f", Velnormal)
+				if Kickspeedx > 0 || Kickspeedz > 0 {
+					log.Printf("ID        : %d", Id)
+					log.Printf("Kickspeedx: %f", v.GetKickspeedx())
+					log.Printf("Kickspeedz: %f", v.GetKickspeedz())
+					log.Printf("Veltangent: %f", Veltangent)
+					log.Printf("Velnormal : %f", Velnormal)
 
-				log.Printf("Velangular: %f", Velangular)
-				log.Printf("Spinner   : %t", Spinner)
+					log.Printf("Velangular: %f", Velangular)
+					log.Printf("Spinner   : %t", Spinner)
+				}
 
 				bytearray := SendStruct{}                   //送信用構造体
 				bytearray.velx = int16(Veltangent * 1000)   //m/s
@@ -161,7 +163,7 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 				}
 			}
 		}
-		log.Println("======================================")
+		// log.Println("======================================")
 	}
 
 }
