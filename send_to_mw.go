@@ -61,7 +61,6 @@ func ClientStream() {
 			log.Fatalf("failed to send image: %v", err)
 			break
 		}
-		fmt.Println(buf.GetBytes())
 	}
 }
 
