@@ -11,11 +11,11 @@ import (
 
 	picturepb "github.com/Rione/ssl-RACOON-Pi2/proto/pb_gen"
 
+	// "gobot.io/x/gobot"
+	// "gobot.io/x/gobot/platforms/opencv"
 	"gocv.io/x/gocv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	// "gobot.io/x/gobot"
-	// "gobot.io/x/gobot/platforms/opencv"
 )
 
 var (
@@ -23,7 +23,8 @@ var (
 	client  picturepb.ImageServiceClient
 	window  *gocv.Window
 	webcam  *gocv.VideoCapture
-	mutex   = &sync.Mutex{}
+	mutex          = &sync.Mutex{}
+	id      uint32 = 1
 )
 
 // func ClientStream() {
@@ -37,27 +38,27 @@ var (
 // 	}
 
 // 	work := func() {
-// 			camera.On(opencv.Frame, func(data interface{}) {
-// 				img := data.(gocv.Mat)
-// 				params := []int{gocv.IMWriteJpegQuality, 25}
-// 				buf, err := gocv.IMEncodeWithParams(".jpg", img, params)
-// 				if err != nil {
-// 					log.Fatalf("failed to encode image: %v", err)
-// 				}
-// 				if err := stream.Send(&picturepb.ImageRequest{
-// 					Image: buf.GetBytes(),
-// 					Id:    1,
-// 				}); err != nil {
-// 					log.Fatalf("failed to send image: %v", err)
-// 				}
-// 				// window.ShowImage(img)
-// 				window.WaitKey(1)
-// 			})
+// 		camera.On(opencv.Frame, func(data interface{}) {
+// 			img := data.(gocv.Mat)
+// 			params := []int{gocv.IMWriteJpegQuality, 25}
+// 			buf, err := gocv.IMEncodeWithParams(".jpg", img, params)
+// 			if err != nil {
+// 				log.Fatalf("failed to encode image: %v", err)
+// 			}
+// 			if err := stream.Send(&picturepb.ImageRequest{
+// 				Image: buf.GetBytes(),
+// 				Id:    int32(id),
+// 			}); err != nil {
+// 				log.Fatalf("failed to send image: %v", err)
+// 			}
+// 			// window.ShowImage(img)
+// 			window.WaitKey(1)
+// 		})
 // 	}
 
 // 	robot := gobot.NewRobot("cameraBot",
-// 			[]gobot.Device{window, camera},
-// 			work,
+// 		[]gobot.Device{window, camera},
+// 		work,
 // 	)
 
 // 	robot.Start()
@@ -103,7 +104,7 @@ func ClientStream() {
 	}
 }
 
-func Streaming(chstreaming chan bool) {
+func Streaming(chstreaming chan bool, MyID uint32) {
 	fmt.Println("start gRPC Client.")
 
 	scanner = bufio.NewScanner(os.Stdin)
@@ -124,6 +125,7 @@ func Streaming(chstreaming chan bool) {
 	client = picturepb.NewImageServiceClient(conn)
 
 	for {
+		id = MyID
 		ClientStream()
 	}
 }

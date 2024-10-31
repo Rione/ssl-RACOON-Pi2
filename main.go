@@ -165,7 +165,7 @@ func main() {
 	go kickCheck(chkick)
 	go RunGPIO(chgpio)
 	go RunApi(chapi, MyID)
-	go Streaming(chstreaming)
+	go Streaming(chstreaming, MyID)
 
 	<-chclient
 	<-chserver
