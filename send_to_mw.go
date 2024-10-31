@@ -14,6 +14,8 @@ import (
 	"gocv.io/x/gocv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	// "gobot.io/x/gobot"
+	// "gobot.io/x/gobot/platforms/opencv"
 )
 
 var (
@@ -23,6 +25,43 @@ var (
 	webcam  *gocv.VideoCapture
 	mutex   = &sync.Mutex{}
 )
+
+// func ClientStream() {
+// 	runtime.LockOSThread()
+// 	window := opencv.NewWindowDriver()
+// 	camera := opencv.NewCameraDriver(0)
+
+// 	stream, err := client.ClientStream(context.Background())
+// 	if err != nil {
+// 		log.Fatalf("error while creating stream: %v", err)
+// 	}
+
+// 	work := func() {
+// 			camera.On(opencv.Frame, func(data interface{}) {
+// 				img := data.(gocv.Mat)
+// 				params := []int{gocv.IMWriteJpegQuality, 25}
+// 				buf, err := gocv.IMEncodeWithParams(".jpg", img, params)
+// 				if err != nil {
+// 					log.Fatalf("failed to encode image: %v", err)
+// 				}
+// 				if err := stream.Send(&picturepb.ImageRequest{
+// 					Image: buf.GetBytes(),
+// 					Id:    1,
+// 				}); err != nil {
+// 					log.Fatalf("failed to send image: %v", err)
+// 				}
+// 				// window.ShowImage(img)
+// 				window.WaitKey(1)
+// 			})
+// 	}
+
+// 	robot := gobot.NewRobot("cameraBot",
+// 			[]gobot.Device{window, camera},
+// 			work,
+// 	)
+
+// 	robot.Start()
+// }
 
 func ClientStream() {
 	runtime.LockOSThread()
@@ -67,10 +106,8 @@ func ClientStream() {
 func Streaming(chstreaming chan bool) {
 	fmt.Println("start gRPC Client.")
 
-	// 1. 標準入力から文字列を受け取るスキャナを用意
 	scanner = bufio.NewScanner(os.Stdin)
 
-	// 2. gRPCサーバーとのコネクションを確立
 	address := "localhost:8081"
 	conn, err := grpc.Dial(
 		address,
@@ -84,7 +121,6 @@ func Streaming(chstreaming chan bool) {
 	}
 	defer conn.Close()
 
-	// 3. gRPCクライアントを生成
 	client = picturepb.NewImageServiceClient(conn)
 
 	for {
