@@ -31,6 +31,14 @@ var (
 )
 
 // func ClientStream() {
+// ipv4 := "127.0.0.1"
+// port := "9999"
+// address := ipv4 + ":" + port
+
+// fmt.Println("Sender:", address)
+// conn, _:= net.Dial("udp", address)
+// // CheckError(err)
+// defer conn.Close()
 // 	runtime.LockOSThread()
 // 	window := opencv.NewWindowDriver()
 // 	camera := opencv.NewCameraDriver(0)
@@ -54,6 +62,16 @@ var (
 // 			}); err != nil {
 // 				log.Fatalf("failed to send image: %v", err)
 // 			}
+
+// pe := &picturepb.ImageRequest{
+// 	Image: buf.GetBytes(),
+// }
+// Data, _ := proto.Marshal(pe)
+
+// conn.Write([]byte(Data))
+
+// conn.Write([]byte(Data))
+
 // 			// window.ShowImage(img)
 // 			window.WaitKey(1)
 // 		})
