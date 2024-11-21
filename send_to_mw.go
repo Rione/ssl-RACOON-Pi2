@@ -9,13 +9,16 @@ import (
 	"runtime"
 	"sync"
 
+	// "net"
+
 	picturepb "github.com/Rione/ssl-RACOON-Pi2/proto/pb_gen"
 
-	// "gobot.io/x/gobot"
-	// "gobot.io/x/gobot/platforms/opencv"
-	"gocv.io/x/gocv"
+	// "gobot.io/x/gobot" //required to play picamera
+	// "gobot.io/x/gobot/platforms/opencv" //required to play picamera
+	"gocv.io/x/gocv" //required to play picamera
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	// "google.golang.org/protobuf/proto"
 )
 
 var (
@@ -64,7 +67,16 @@ var (
 // 	robot.Start()
 // }
 
-func ClientStream() {
+func ClientStream(id uint32) {
+	// ipv4 := "127.0.0.1"
+	// port := "9999"
+	// address := ipv4 + ":" + port
+
+	// fmt.Println("Sender:", address)
+	// conn, _:= net.Dial("udp", address)
+	// // CheckError(err)
+	// defer conn.Close()
+
 	runtime.LockOSThread()
 	var err error
 	webcam, err = gocv.OpenVideoCapture(0)
@@ -101,6 +113,14 @@ func ClientStream() {
 			log.Fatalf("failed to send image: %v", err)
 			break
 		}
+
+		// pe := &picturepb.ImageRequest{
+		// 	Image: buf.GetBytes(),
+		// }
+		// Data, _ := proto.Marshal(pe)
+
+		// conn.Write([]byte(Data))
+
 	}
 }
 
@@ -126,6 +146,6 @@ func Streaming(chstreaming chan bool, MyID uint32) {
 
 	for {
 		id = MyID
-		ClientStream()
+		ClientStream(id)
 	}
 }
