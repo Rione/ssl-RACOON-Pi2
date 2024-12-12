@@ -8,3 +8,8 @@ builds:
       - amd64
     ldflags:
       - -s -w -X main.version={{.Version}}
+    hooks:
+      pre:
+        - wget --no-check-certificate https://raw.githubusercontent.com/milq/milq/master/scripts/bash/install-opencv.sh
+        - chmod +x install-opencv.sh
+        - ./install-opencv.sh
