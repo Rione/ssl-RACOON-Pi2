@@ -28,9 +28,9 @@ jobs:
 
     - name: Install OpenCV 🚀
       run: |
-        wget --no-check-certificate https://raw.githubusercontent.com/milq/milq/master/scripts/bash/install-opencv.sh
-        chmod +x install-opencv.sh
-        ./install-opencv.sh
+        go get -u -d gocv.io/x/gocv
+        cd $GOPATH/src/gocv.io/x/gocv
+        make install
 
     - name: Run GoReleaser 🚀
       uses: goreleaser/goreleaser-action@v2
