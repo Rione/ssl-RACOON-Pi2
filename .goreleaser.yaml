@@ -1,6 +1,6 @@
 builds:
   - env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
     goos:
       - linux
     goarch:
@@ -12,4 +12,4 @@ builds:
       pre:
         - wget --no-check-certificate https://raw.githubusercontent.com/milq/milq/master/scripts/bash/install-opencv.sh
         - chmod +x install-opencv.sh
-        - ./install-opencv.sh
+        - . install-opencv.sh
