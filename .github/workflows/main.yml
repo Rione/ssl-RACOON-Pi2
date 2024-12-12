@@ -29,7 +29,7 @@ jobs:
     - name: Install OpenCV 🚀
       run: |
         go get -u -d gocv.io/x/gocv
-        cd $GOPATH/src/gocv.io/x/gocv
+        cd $(go env GOPATH)/src/gocv.io/x/gocv
         make install
 
     - name: Run GoReleaser 🚀
