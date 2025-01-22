@@ -24,7 +24,13 @@ jobs:
     - name: Set up Go env 🏗
       uses: actions/setup-go@v2
       with:
-        go-version: "1.17"
+        go-version: "1.22.7"
+
+    - name: Install OpenCV 🚀
+      run: |
+        go get -u -d gocv.io/x/gocv
+        cd $GOPATH/src/gocv.io/x/gocv
+        make install
 
     - name: Run GoReleaser 🚀
       uses: goreleaser/goreleaser-action@v2
