@@ -33,7 +33,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 	if err := port.SetMode(mode); err != nil {
 		log.Fatal(err)
 	}
-	last_recv_time = time.Now()
+	last_recv_time = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	for {
 		//受信できるまで読み込む。バイトが0xFF, 0x00, 0xFF, 0x00のときは受信できると判断する
@@ -141,15 +141,11 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		if !isReceived && pre_isReceived {
 			log.Println("No Data Recv")
-			doBuzzer = true
-			buzzerTone = 14
-			buzzerTime = 1000 * time.Millisecond
+			go ringBuzzer(3, 500*time.Millisecond, 0)
 		}
 
 		if isReceived && !pre_isReceived {
-			doBuzzer = true
-			buzzerTone = 12
-			buzzerTime = 500 * time.Millisecond
+			go ringBuzzer(10, 500*time.Millisecond, 0)
 		}
 
 		if kicker_enable {

@@ -21,7 +21,7 @@ var sendarray bytes.Buffer //送信用バッファ
 type RecvStruct struct {
 	Volt                uint8
 	IsDetectPhotosensor bool
-	IsTouchingDribbler  bool
+	// IsTouchingDribbler  bool
 	CapPower            uint8
 }
 
