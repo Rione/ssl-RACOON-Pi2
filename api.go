@@ -131,7 +131,7 @@ func HandleRequest(conn net.Conn) {
 		"ERROR": %t,
 		"ERRORCODE": %d,
 		"ERRORMESSAGE": "%s"
-	}`, float32(recvdata.Volt)/10.0, recvdata.IsHoldBall, isRobotError, RobotErrorCode, RobotErrorMessage)
+	}`, float32(recvdata.Volt)/10.0, recvdata.IsDetectPhotosensor, isRobotError, RobotErrorCode, RobotErrorMessage)
 
 	fmt.Fprint(conn, response)
 
