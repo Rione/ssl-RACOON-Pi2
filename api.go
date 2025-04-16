@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -117,6 +118,32 @@ func HandleRequest(conn net.Conn) {
 		//アラーム無視をセットする
 		alarmIgnore = true
 		return
+	}
+
+	if strings.Split(requests[1], "/")[1] == "photo" {
+		// 画像ファイルを読み込む
+		imgBytes, err := os.ReadFile("photo.jpg")
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
+			return
+		}
+
+		// 画像データを返すためのHTTPヘッダーを送信
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n")
+		fmt.Fprintf(conn, "Content-Type: image/jpeg\r\n")
+		fmt.Fprintf(conn, "Content-Length: %d\r\n", len(imgBytes))
+		fmt.Fprintf(conn, "\r\n") // 空行でヘッダーと本文を区切る
+
+		// 画像データを送信
+		_, err = conn.Write(imgBytes)
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
+			return
+		}
 	}
 
 	// 200 OKを返す
