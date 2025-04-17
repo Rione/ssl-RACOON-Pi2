@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"log"
 	"net"
 	"time"
@@ -165,5 +166,28 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 		}
 		// log.Println("======================================")
 	}
+
+}
+
+func ReceiveData(chclient chan bool, MyID uint32, ip string) {
+	serverAddr := &net.UDPAddr{
+		IP:   net.ParseIP(ip),
+		Port: 31133,
+	}
+
+	serverConn, err := net.ListenUDP("udp", serverAddr)
+	CheckError(err)
+	defer serverConn.Close()
+
+	buf := make([]byte, 1024)
+	n, _, _ := serverConn.ReadFromUDP(buf)
+
+	jsonData := &ImageData{}
+	err = json.Unmarshal(buf[0:n], jsonData)
+	if err != nil {
+		log.Fatal("Error: ", err)
+	}
+
+	imageData = *jsonData
 
 }

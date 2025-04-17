@@ -78,3 +78,12 @@ var chip_val uint8 = 0         //チップキックの値
 
 var doDirectChipKick bool = false
 var doDirectKick bool = false
+
+type ImageData struct {
+	Is_ball_exit bool   `json:"isball"`
+	Image_x      int    `json:"image_x"`
+	Image_y      int    `json:"image_y"`
+	Frame        string `json:"frame"`
+}
+
+var imageData ImageData

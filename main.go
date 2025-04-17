@@ -156,7 +156,7 @@ func main() {
 	chkick := make(chan bool)
 	chgpio := make(chan bool)
 	chapi := make(chan bool)
-	chstreaming := make(chan bool)
+	chreceive := make(chan bool)
 
 	//各並列処理部分
 	go RunClient(chclient, MyID, ip)
@@ -165,7 +165,7 @@ func main() {
 	go kickCheck(chkick)
 	go RunGPIO(chgpio)
 	go RunApi(chapi, MyID)
-	go Streaming(chstreaming, MyID)
+	go ReceiveData(chreceive, MyID, ip)
 
 	<-chclient
 	<-chserver
@@ -173,7 +173,7 @@ func main() {
 	<-chkick
 	<-chgpio
 	<-chapi
-	<-chstreaming
+	<-chreceive
 }
 
 func CheckError(err error) {
