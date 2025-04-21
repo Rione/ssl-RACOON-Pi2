@@ -29,7 +29,7 @@ func RunServer(chserver chan bool, MyID uint32) {
 	defer conn.Close()
 
 	for {
-		pe := createStatus(uint32(MyID), recvdata.IsHoldBall, uint32(recvdata.Volt), uint32(recvdata.CapPower), imageData.Is_ball_exit, imageData.Image_x, imageData.Image_y)
+		pe := createStatus(uint32(MyID), recvdata.IsDetectPhotosensor, uint32(recvdata.Volt), uint32(recvdata.CapPower), imageData.Is_ball_exit, imageData.Image_x, imageData.Image_y)
 		Data, _ := proto.Marshal(pe)
 
 		conn.Write([]byte(Data))

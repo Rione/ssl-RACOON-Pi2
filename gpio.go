@@ -34,30 +34,56 @@ func RunGPIO(chgpio chan bool) {
 	button2.Input()
 	button2.PullUp()
 
-	//GPIO12をブザーPWMに設定。出力
-	buzzer := rpio.Pin(13)
-	buzzer.Mode(rpio.Pwm)
-	buzzer.Freq(64000)
-	buzzer.DutyCycle(0, 32)
-
 	// ここで音楽を鳴らす
-	buzzer.Freq(1244 * 64)
-	buzzer.DutyCycle(16, 32)
-	time.Sleep(time.Millisecond * 100)
-	buzzer.Freq(1108 * 64)
-	time.Sleep(time.Millisecond * 100)
-	buzzer.Freq(739 * 64)
-	time.Sleep(time.Millisecond * 150)
-	buzzer.DutyCycle(0, 32)
-	time.Sleep(time.Millisecond * 100)
-	buzzer.Freq(1479 * 64)
-	buzzer.DutyCycle(16, 32)
-	time.Sleep(time.Millisecond * 100)
-	buzzer.DutyCycle(0, 32)
-	time.Sleep(time.Millisecond * 100)
-	buzzer.DutyCycle(16, 32)
-	time.Sleep(time.Millisecond * 100)
-	buzzer.DutyCycle(0, 32)
+	// buzzer.Freq(1244 * 64)
+	// buzzer.DutyCycle(16, 32)
+	// time.Sleep(time.Millisecond * 100)
+	// buzzer.Freq(1108 * 64)
+	// time.Sleep(time.Millisecond * 100)
+	// buzzer.Freq(739 * 64)
+	// time.Sleep(time.Millisecond * 150)
+	// buzzer.DutyCycle(0, 32)
+	// time.Sleep(time.Millisecond * 100)
+	// buzzer.Freq(1479 * 64)
+	// buzzer.DutyCycle(16, 32)
+	// time.Sleep(time.Millisecond * 100)
+	// buzzer.DutyCycle(0, 32)
+	// time.Sleep(time.Millisecond * 100)
+	// buzzer.DutyCycle(16, 32)
+	// time.Sleep(time.Millisecond * 100)
+	// buzzer.DutyCycle(0, 32)
+
+	ringBuzzer(0, 100*time.Millisecond, 1244)
+	ringBuzzer(0, 100*time.Millisecond, 1108)
+	ringBuzzer(0, 150*time.Millisecond, 739)
+	time.Sleep(100 * time.Millisecond)
+	ringBuzzer(0, 100*time.Millisecond, 1479)
+	time.Sleep(100 * time.Millisecond)
+	ringBuzzer(0, 100*time.Millisecond, 1479)
+
+	// ringBuzzer(0, 1000*time.Millisecond)  //ラ#
+	// ringBuzzer(1, 1000*time.Millisecond)  //シ
+	// ringBuzzer(2, 1000*time.Millisecond)  //ド
+	// ringBuzzer(3, 1000*time.Millisecond)  //ド#
+	// ringBuzzer(4, 1000*time.Millisecond)  //レ
+	// ringBuzzer(5, 1000*time.Millisecond)  //レ#
+	// ringBuzzer(6, 1000*time.Millisecond)  //ミ
+	// ringBuzzer(7, 1000*time.Millisecond)  //ファ
+	// ringBuzzer(8, 1000*time.Millisecond)  //ファ#
+	// ringBuzzer(9, 1000*time.Millisecond)  //ソ
+	// ringBuzzer(10, 1000*time.Millisecond) //ソ#
+	// ringBuzzer(11, 1000*time.Millisecond) //ラ
+	// ringBuzzer(12, 1000*time.Millisecond) //ラ#
+	// ringBuzzer(13, 1000*time.Millisecond) //シ
+	// ringBuzzer(14, 1000*time.Millisecond) //ド
+	// ringBuzzer(15, 1000*time.Millisecond) //ド#
+	// ringBuzzer(16, 1000*time.Millisecond) //レ
+	// ringBuzzer(17, 1000*time.Millisecond) //レ#
+	// ringBuzzer(18, 1000*time.Millisecond) //ミ
+	// ringBuzzer(19, 1000*time.Millisecond) //ファ
+	// ringBuzzer(20, 1000*time.Millisecond) //ファ#
+	// ringBuzzer(21, 1000*time.Millisecond) //ソ
+	// ringBuzzer(22, 1000*time.Millisecond) //ソ#
 
 	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
 	dip1 := rpio.Pin(4)
@@ -91,38 +117,49 @@ func RunGPIO(chgpio chan bool) {
 	for {
 		//電圧降下検知
 		if recvdata.Volt <= uint8(alarmVoltage) {
+			log.Println("BATTERY ALARM")
 			for {
-				buzzer.Freq(1200 * 64)
-				buzzer.DutyCycle(16, 32)
+				if recvdata.Volt <= uint8(BATTERY_CRITICAL_THRESHOULD) {
+					ringBuzzer(25, 5000*time.Millisecond, 0)
+					continue
+				}
 
-				//高速チカチカ
 				led2.High()
-				time.Sleep(100 * time.Millisecond)
-
-				buzzer.Freq(760 * 64)
+				go ringBuzzer(25, 50*time.Millisecond, 0)
+				time.Sleep(60 * time.Millisecond)
+				go ringBuzzer(20, 90*time.Millisecond, 0)
 				led2.Low()
-				time.Sleep(150 * time.Millisecond)
+				time.Sleep(120 * time.Millisecond)
 
 				if button1.Read()^1 == rpio.High || alarmIgnore {
 					//一時的にアラーム解除する
 					log.Println("BATTERY ALARM IGNORED")
 					alarmVoltage = BATTERY_CRITICAL_THRESHOULD
+					time.Sleep(100 * time.Millisecond)
+					go ringBuzzer(20, 20*time.Millisecond, 0)
+					time.Sleep(300 * time.Millisecond)
+					go ringBuzzer(20, 20*time.Millisecond, 0)
+					time.Sleep(300 * time.Millisecond)
+					go ringBuzzer(20, 20*time.Millisecond, 0)
+					time.Sleep(300 * time.Millisecond)
 					break
 				}
 			}
 		} else {
 			//通常チカチカ。ボタンが押されたら高速チカチカ
 			//button2はkickボタン
-			buzzer.Freq(1479 * 64)
+			// buzzer.Freq(1479 * 64)
 			time.Sleep(ledsec)
 			led.Write(rpio.High)
 			if button1.Read()^1 == rpio.High {
-				ledsec = 100 * time.Millisecond
-				buzzer.DutyCycle(16, 32)
+				ledsec = 75 * time.Millisecond
+				go ringBuzzer(20, 20*time.Millisecond, 0)
 			} else {
 				ledsec = 500 * time.Millisecond
 			}
 			if button2.Read()^1 == rpio.High {
+				go ringBuzzer(10, 50*time.Millisecond, 0)
+
 				//log.Println(button2.Read())
 				//kickする
 				//buzzer.DutyCycle(16, 32)
@@ -133,15 +170,24 @@ func RunGPIO(chgpio chan bool) {
 			}
 			time.Sleep(ledsec)
 			led.Write(rpio.Low)
-			buzzer.DutyCycle(0, 32)
-
-			if doBuzzer {
-				buzzer.Freq(int(440*math.Pow(1.0595, float64(buzzerTone))) * 64)
-				buzzer.DutyCycle(16, 32)
-				time.Sleep(buzzerTime)
-				buzzer.DutyCycle(0, 32)
-				doBuzzer = false
-			}
 		}
 	}
+}
+
+func ringBuzzer(buzzerTone int, buzzerTime time.Duration, freq int) {
+	//GPIO12をブザーPWMに設定。出力
+	buzzer := rpio.Pin(13)
+	buzzer.Mode(rpio.Pwm)
+
+	if freq == 0 {
+		freq = int(440*math.Pow(1.0595, float64(buzzerTone))) * 64
+	} else {
+		freq = freq * 64
+	}
+
+	buzzer.Freq(freq)
+	buzzer.DutyCycle(16, 32)
+	time.Sleep(buzzerTime)
+	buzzer.DutyCycle(0, 32)
+
 }

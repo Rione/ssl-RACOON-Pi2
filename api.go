@@ -103,9 +103,7 @@ func HandleRequest(conn net.Conn) {
 		fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
 		fmt.Fprintf(conn, "BUZZER OK\r\n")
 		//ブザーを1秒鳴らす
-		doBuzzer = true
-		buzzerTone = tone
-		buzzerTime = time.Duration(duration) * time.Millisecond
+		ringBuzzer(tone, time.Duration(duration)*time.Millisecond, 0)
 		return
 	}
 
@@ -155,7 +153,7 @@ func HandleRequest(conn net.Conn) {
 		"ERROR": %t,
 		"ERRORCODE": %d,
 		"ERRORMESSAGE": "%s"
-	}`, float32(recvdata.Volt)/10.0, recvdata.IsHoldBall, isRobotError, RobotErrorCode, RobotErrorMessage)
+	}`, float32(recvdata.Volt)/10.0, recvdata.IsDetectPhotosensor, isRobotError, RobotErrorCode, RobotErrorMessage)
 
 	fmt.Fprint(conn, response)
 

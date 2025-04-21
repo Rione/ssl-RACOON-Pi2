@@ -19,9 +19,10 @@ var sendarray bytes.Buffer //送信用バッファ
 
 // 受信時の構造体
 type RecvStruct struct {
-	Volt       uint8
-	IsHoldBall bool
-	CapPower   uint8
+	Volt                uint8
+	IsDetectPhotosensor bool
+	// IsTouchingDribbler  bool
+	CapPower uint8
 }
 
 type SendStruct struct {
