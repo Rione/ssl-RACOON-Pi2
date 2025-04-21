@@ -81,8 +81,8 @@ var doDirectKick bool = false
 
 type ImageData struct {
 	Is_ball_exit bool   `json:"isball"`
-	Image_x      int    `json:"image_x"`
-	Image_y      int    `json:"image_y"`
+	Image_x      uint32 `json:"image_x"`
+	Image_y      uint32 `json:"image_y"`
 	Frame        string `json:"frame"`
 }
 
