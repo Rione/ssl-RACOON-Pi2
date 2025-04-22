@@ -9,12 +9,20 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func createStatus(robotid uint32, infrared bool, batt uint32, cappower uint32, is_ball_exit bool, image_x uint32, image_y uint32) *pb_gen.Robot_Status {
-	pe := &pb_gen.Robot_Status{
-		RobotId: &robotid, Infrared: &infrared, BatteryVoltage: &batt, CapPower: &cappower, IsBallExit: &is_ball_exit, ImageX: &image_x, ImageY: &image_y,
+func createStatus(robotid uint32, infrared bool, batt uint32, cappower uint32, is_ball_exit bool, image_x float32, image_y float32) *pb_gen.PiToMw {
+	return &pb_gen.PiToMw{
+		RobotsStatus: &pb_gen.Robot_Status{
+			RobotId:        &robotid,
+			Infrared:       &infrared,
+			BatteryVoltage: &batt,
+			CapPower:       &cappower,
+		},
+		BallStatus: &pb_gen.Ball_Status{
+			IsBallExit: &is_ball_exit,
+			ImageX:     &image_x,
+			ImageY:     &image_y,
+		},
 	}
-
-	return pe
 }
 
 // RACOON-MWにボールセンサ等の情報を送信するためのサーバ
