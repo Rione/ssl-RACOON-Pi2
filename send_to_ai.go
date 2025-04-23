@@ -18,9 +18,9 @@ func createStatus(robotid uint32, infrared bool, batt uint32, cappower uint32, i
 			CapPower:       &cappower,
 		},
 		BallStatus: &pb_gen.Ball_Status{
-			IsBallExit: &is_ball_exit,
-			ImageX:     &image_x,
-			ImageY:     &image_y,
+			IsBallExit:  &is_ball_exit,
+			BallCameraX: &image_x,
+			BallCameraY: &image_y,
 		},
 	}
 }

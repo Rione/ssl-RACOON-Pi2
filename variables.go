@@ -88,3 +88,9 @@ type ImageData struct {
 }
 
 var imageData ImageData
+
+type ImageResponse struct {
+	Frame string `json:"frame"`
+}
+
+var imageResponse ImageResponse

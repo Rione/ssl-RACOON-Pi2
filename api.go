@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -117,28 +118,22 @@ func HandleRequest(conn net.Conn) {
 		return
 	}
 
-	if strings.Split(requests[1], "/")[1] == "photo" {
+	if strings.Split(requests[1], "/")[1] == "image" {
 
+		response, err := json.Marshal(imageResponse.Frame)
 		if err != nil {
 			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
 			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
 			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
 			return
 		}
-
-		// 画像データを返すためのHTTPヘッダーを送信
+		// HTTP レスポンスを返す
 		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n")
-		fmt.Fprintf(conn, "Content-Type: image/jpeg\r\n")
-		fmt.Fprintf(conn, "Content-Length: %d\r\n", len(imageData.Frame))
-		fmt.Fprintf(conn, "\r\n") // 空行でヘッダーと本文を区切る
+		fmt.Fprintf(conn, "Content-Type: application/json\r\n")
+		fmt.Fprintf(conn, "Content-Length: %d\r\n", len(response))
+		fmt.Fprintf(conn, "\r\n")
+		fmt.Fprintf(conn, "%s", response)
 
-		_, err = conn.Write([]byte(imageData.Frame))
-		if err != nil {
-			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
-			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
-			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
-			return
-		}
 	}
 
 	// 200 OKを返す
