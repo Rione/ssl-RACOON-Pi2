@@ -94,3 +94,10 @@ type ImageResponse struct {
 }
 
 var imageResponse ImageResponse
+
+type Adjustment struct {
+	Min_Threshold         string  `json:"minThreshold"`
+	Max_Threshold         string  `json:"maxThreshold"`
+	Ball_Detect_Radius    int     `json:"ballDetectRadius"`
+	Circularity_Threshold float32 `json:"circularityThreshold"`
+}
