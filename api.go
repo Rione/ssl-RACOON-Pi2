@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -134,6 +135,61 @@ func HandleRequest(conn net.Conn) {
 		fmt.Fprintf(conn, "\r\n")
 		fmt.Fprintf(conn, "%s", response)
 
+	}
+
+	if strings.Split(requests[1], "/")[1] == "changeAdjustment" {
+		// /changeadjustment/1,120,100/15,255,255/150/0.2これを受け取る
+		// /120,100,15をとる
+		minThreshold := strings.Split(requests[1], "/")[2]
+		maxThreshold := strings.Split(requests[1], "/")[3]
+		ballDetectRadius, err := strconv.Atoi(strings.Split(requests[1], "/")[4])
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "400 Bad Request\r\n")
+		}
+		circularityThreshold, err := strconv.ParseFloat(strings.Split(requests[1], "/")[5], 32)
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "400 Bad Request\r\n")
+		}
+		// OK と表示
+		fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\n")
+		fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+		fmt.Fprintf(conn, "CHANGE ADJUSTMENT OK\r\n")
+		// /changeadjustment/1,120,100/15,255,255/150/0.2を受け取ったら、jsonファイルを変更する
+		// jsonファイルを変更する
+		file, err := os.OpenFile("threshold.json", os.O_RDWR|os.O_CREATE, 0755)
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
+		}
+		defer file.Close()
+		// jsonファイルに書き込む
+		data := Adjustment{Min_Threshold: minThreshold, Max_Threshold: maxThreshold, Ball_Detect_Radius: ballDetectRadius, Circularity_Threshold: float32(circularityThreshold)}
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
+		}
+		_, err = file.Write(jsonData)
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
+		}
+		// jsonファイルを閉じる
+		err = file.Close()
+		if err != nil {
+			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
+			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
+			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
+		}
+
+		return
 	}
 
 	// 200 OKを返す
