@@ -295,8 +295,9 @@ class Encoder:
         # Create data dictionary
         data = {
             'frame': frame_bytes_b64,
-            'x': x_coord,
-            'y': y_coord
+            'image_x': x_coord,
+            'image_y': y_coord,
+            'isball': bool(x_coord and y_coord),
         }
 
         # Serialize dictionary to JSON string
@@ -370,6 +371,7 @@ def main():
 
             # Prepare frame for encoding (resize)
             frame_resized = cv2.resize(frame, (output_width, output_height), interpolation=cv2.INTER_AREA)
+            #print(center)
 
             # Encode data (resized frame and center coordinates)
             encoded_json_string = Encoder.encodeData(frame_resized, center, quality=jpeg_quality)
