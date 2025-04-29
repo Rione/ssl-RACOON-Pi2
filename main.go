@@ -80,6 +80,7 @@ func main() {
 	netInterfaceAddresses, _ := net.InterfaceAddrs()
 
 	ip := "0.0.0.0"
+	ipCamera := "127.0.0.1"
 	for _, netInterfaceAddress := range netInterfaceAddresses {
 		networkIp, ok := netInterfaceAddress.(*net.IPNet)
 		if ok && !networkIp.IP.IsLoopback() && networkIp.IP.To4() != nil {
@@ -165,7 +166,7 @@ func main() {
 	go kickCheck(chkick)
 	go RunGPIO(chgpio)
 	go RunApi(chapi, MyID)
-	go ReceiveData(chreceive, MyID, ip)
+	go ReceiveData(chreceive, MyID, ipCamera)
 
 	<-chclient
 	<-chserver

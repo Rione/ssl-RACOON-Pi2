@@ -174,21 +174,21 @@ func ReceiveData(chclient chan bool, MyID uint32, ip string) {
 		IP:   net.ParseIP(ip),
 		Port: 31133,
 	}
-
 	serverConn, err := net.ListenUDP("udp", serverAddr)
 	CheckError(err)
 	defer serverConn.Close()
 
-	buf := make([]byte, 1024)
-	n, _, _ := serverConn.ReadFromUDP(buf)
+	buf := make([]byte, 10240)
+	for {
+		n, _, _ := serverConn.ReadFromUDP(buf)
 
-	jsonData := &ImageData{}
-	err = json.Unmarshal(buf[0:n], jsonData)
-	if err != nil {
-		log.Fatal("Error: ", err)
+		jsonData := &ImageData{}
+		err = json.Unmarshal(buf[0:n], jsonData)
+		if err != nil {
+			log.Fatal("Error: ", err)
+		}
+
+		imageData = *jsonData
+		imageResponse.Frame = jsonData.Frame
 	}
-
-	imageData = *jsonData
-	imageResponse.Frame = jsonData.Frame
-
 }

@@ -18,10 +18,7 @@ func RunApi(chapi chan bool, MyID uint32) {
 	// python3 main.py を実行する
 	cmd = exec.Command("python3", "main.py")
 	//コマンドを実行
-	err := cmd.Start()
-	if err != nil {
-		log.Println(err)
-	}
+	cmd.Start()
 	//ポートを開く
 	listener, err := net.Listen("tcp", PORT)
 	if err != nil {
@@ -147,7 +144,7 @@ func HandleRequest(conn net.Conn) {
 
 	}
 
-	if strings.Split(requests[1], "/")[1] == "changeAdjustment" {
+	if strings.Split(requests[1], "/")[1] == "changeadjustment" {
 		// /changeadjustment/1,120,100/15,255,255/150/0.2これを受け取る
 		// /120,100,15をとる
 		minThreshold := strings.Split(requests[1], "/")[2]
@@ -170,11 +167,11 @@ func HandleRequest(conn net.Conn) {
 		fmt.Fprintf(conn, "CHANGE ADJUSTMENT OK\r\n")
 		// /changeadjustment/1,120,100/15,255,255/150/0.2を受け取ったら、jsonファイルを変更する
 		// jsonファイルを変更する
-		file, err := os.OpenFile("threshold.json", os.O_RDWR|os.O_CREATE, 0755)
+
+		os.Remove("threshold.json")
+		file, err := os.Create("threshold.json")
 		if err != nil {
-			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
-			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
-			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
+			log.Println(err)
 		}
 		defer file.Close()
 		// jsonファイルに書き込む
