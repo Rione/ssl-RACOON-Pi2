@@ -6,12 +6,22 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 )
 
+var cmd *exec.Cmd
+
 func RunApi(chapi chan bool, MyID uint32) {
+	// python3 main.py を実行する
+	cmd = exec.Command("python3", "main.py")
+	//コマンドを実行
+	err := cmd.Start()
+	if err != nil {
+		log.Println(err)
+	}
 	//ポートを開く
 	listener, err := net.Listen("tcp", PORT)
 	if err != nil {
@@ -187,6 +197,14 @@ func HandleRequest(conn net.Conn) {
 			fmt.Fprintf(conn, "HTTP/1.1 500 Internal Server Error\r\n")
 			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
 			fmt.Fprintf(conn, "500 Internal Server Error\r\n")
+		}
+
+		cmd.Process.Kill()
+		cmd = exec.Command("python3", "main.py")
+
+		err = cmd.Start()
+		if err != nil {
+			log.Println(err)
 		}
 
 		return
