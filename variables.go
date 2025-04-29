@@ -19,10 +19,14 @@ var sendarray bytes.Buffer //送信用バッファ
 
 // 受信時の構造体
 type RecvStruct struct {
-	Volt                uint8
-	IsDetectPhotosensor bool
-	// IsTouchingDribbler  bool
-	CapPower            uint8
+	Volt              uint8
+	SensorInformation uint8
+	// SensorInformationのビット構成
+	// bit[0-4] Reserved
+	// IsNewDribbler        bit[5]
+	// IsDetectDribbler     bit[6]
+	// IsDetectPhotoSensor  bit[7]
+	CapPower uint8
 }
 
 type SendStruct struct {
@@ -66,10 +70,6 @@ var isRobotError = false
 var RobotErrorCode = 0
 var RobotErrorMessage = ""
 
-var doBuzzer = false
-var buzzerTone = 0
-var buzzerTime time.Duration = 0 * time.Millisecond
-
 var alarmIgnore = false
 
 var kicker_enable bool = false //キッカーの入力のON OFFを定義する
@@ -79,3 +79,25 @@ var chip_val uint8 = 0         //チップキックの値
 
 var doDirectChipKick bool = false
 var doDirectKick bool = false
+
+type ImageData struct {
+	Is_ball_exit bool    `json:"isball"`
+	Image_x      float32 `json:"image_x"`
+	Image_y      float32 `json:"image_y"`
+	Frame        string  `json:"frame"`
+}
+
+var imageData ImageData
+
+type ImageResponse struct {
+	Frame string `json:"frame"`
+}
+
+var imageResponse ImageResponse
+
+type Adjustment struct {
+	Min_Threshold         string  `json:"minThreshold"`
+	Max_Threshold         string  `json:"maxThreshold"`
+	Ball_Detect_Radius    int     `json:"ballDetectRadius"`
+	Circularity_Threshold float32 `json:"circularityThreshold"`
+}

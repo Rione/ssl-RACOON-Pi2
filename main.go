@@ -41,6 +41,7 @@ func kickCheck(chkicker chan bool) {
 		//ループを行うため、少し待機する
 		time.Sleep(16 * time.Millisecond)
 	}
+	<-chkicker
 }
 
 func main() {
@@ -80,6 +81,7 @@ func main() {
 	netInterfaceAddresses, _ := net.InterfaceAddrs()
 
 	ip := "0.0.0.0"
+	ipCamera := "127.0.0.1"
 	for _, netInterfaceAddress := range netInterfaceAddresses {
 		networkIp, ok := netInterfaceAddress.(*net.IPNet)
 		if ok && !networkIp.IP.IsLoopback() && networkIp.IP.To4() != nil {
@@ -156,6 +158,7 @@ func main() {
 	chkick := make(chan bool)
 	chgpio := make(chan bool)
 	chapi := make(chan bool)
+	chreceive := make(chan bool)
 
 	//各並列処理部分
 	go RunClient(chclient, MyID, ip)
@@ -164,6 +167,7 @@ func main() {
 	go kickCheck(chkick)
 	go RunGPIO(chgpio)
 	go RunApi(chapi, MyID)
+	go ReceiveData(chreceive, MyID, ipCamera)
 
 	<-chclient
 	<-chserver
@@ -171,6 +175,7 @@ func main() {
 	<-chkick
 	<-chgpio
 	<-chapi
+	<-chreceive
 }
 
 func CheckError(err error) {
