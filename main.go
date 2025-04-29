@@ -125,6 +125,10 @@ func main() {
 		cmd = exec.Command("hostnamectl", "set-hostname", hostname)
 		cmd.Run()
 
+		//hostsの変更
+		cmd = exec.Command("sudo", "sed", "-i", "/etc/hosts", "-e", "s/raspberrypi/"+hostname+"/g", "/etc/hosts")
+		cmd.Run()
+
 		//再起動
 		log.Println("=====Reboot=====")
 
