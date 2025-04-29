@@ -213,13 +213,23 @@ func HandleRequest(conn net.Conn) {
 	fmt.Fprintf(conn, "Content-Type: application/json; charset=utf-8\r\n\r\n")
 
 	// JSON形式で返す
+
+	// 左から1ビットだけを取り出す
+	detectPhotoSensor := 0b10000000&recvdata.SensorInformation != 0
+	// 左から2ビット目だけを取り出す
+	detectDribblerSensor := 0b01000000&recvdata.SensorInformation != 0
+	// 左から3ビット目だけを取り出す
+	isNewDribbler := 0b00100000&recvdata.SensorInformation != 0
+
 	response := fmt.Sprintf(`{
 		"VOLT": %f,
-		"ISHOLDBALL": %t,
+		"ISDETECTPHOTOSENSOR": %t,
+		"ISDETECTDRIBBLERSENSOR": %t,
+		"ISNEWDRIBBLER": %t,
 		"ERROR": %t,
 		"ERRORCODE": %d,
 		"ERRORMESSAGE": "%s"
-	}`, float32(recvdata.Volt)/10.0, recvdata.IsDetectPhotosensor, isRobotError, RobotErrorCode, RobotErrorMessage)
+	}`, float32(recvdata.Volt)/10.0, detectPhotoSensor, detectDribblerSensor, isNewDribbler, isRobotError, RobotErrorCode, RobotErrorMessage)
 
 	fmt.Fprint(conn, response)
 

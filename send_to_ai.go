@@ -11,13 +11,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func createStatus(robotid uint32, infrared bool, batt uint32, cappower uint32, is_ball_exit bool, image_x float32, image_y float32, minthreshold string, maxthreshold string, balldetectradius int32, circularitythreshold float32) *pb_gen.PiToMw {
+func createStatus(robotid uint32, isdetectphotosensor bool, isdetectdribbler bool, isnewdribbler bool, batt uint32, cappower uint32, is_ball_exit bool, image_x float32, image_y float32, minthreshold string, maxthreshold string, balldetectradius int32, circularitythreshold float32) *pb_gen.PiToMw {
 	return &pb_gen.PiToMw{
 		RobotsStatus: &pb_gen.Robot_Status{
-			RobotId:        &robotid,
-			Infrared:       &infrared,
-			BatteryVoltage: &batt,
-			CapPower:       &cappower,
+			RobotId:                &robotid,
+			IsDetectPhotoSensor:    &isdetectphotosensor,
+			IsDetectDribblerSensor: &isdetectdribbler,
+			IsNewDribbler:          &isnewdribbler,
+			BatteryVoltage:         &batt,
+			CapPower:               &cappower,
 		},
 		BallStatus: &pb_gen.Ball_Status{
 			IsBallExit:  &is_ball_exit,
@@ -85,7 +87,14 @@ func RunServer(chserver chan bool, MyID uint32) {
 		}
 
 		for {
-			pe := createStatus(uint32(MyID), recvdata.IsDetectPhotosensor, uint32(recvdata.Volt), uint32(recvdata.CapPower), imageData.Is_ball_exit, imageData.Image_x, imageData.Image_y, minThreshold, maxThreshold, int32(ballDetectRadius), circularityThreshold)
+			// 左から1ビットだけを取り出す
+			detectPhotoSensor := 0b10000000&recvdata.SensorInformation != 0
+			// 左から2ビット目だけを取り出す
+			detectDribblerSensor := 0b01000000&recvdata.SensorInformation != 0
+			// 左から3ビット目だけを取り出す
+			isNewDribbler := 0b00100000&recvdata.SensorInformation != 0
+
+			pe := createStatus(uint32(MyID), detectPhotoSensor, detectDribblerSensor, isNewDribbler, uint32(recvdata.Volt), uint32(recvdata.CapPower), imageData.Is_ball_exit, imageData.Image_x, imageData.Image_y, minThreshold, maxThreshold, int32(ballDetectRadius), circularityThreshold)
 			Data, _ := proto.Marshal(pe)
 
 			conn.Write([]byte(Data))

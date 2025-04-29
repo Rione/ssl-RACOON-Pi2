@@ -41,6 +41,7 @@ func kickCheck(chkicker chan bool) {
 		//ループを行うため、少し待機する
 		time.Sleep(16 * time.Millisecond)
 	}
+	<-chkicker
 }
 
 func main() {

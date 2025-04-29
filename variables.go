@@ -19,9 +19,13 @@ var sendarray bytes.Buffer //送信用バッファ
 
 // 受信時の構造体
 type RecvStruct struct {
-	Volt                uint8
-	IsDetectPhotosensor bool
-	// IsTouchingDribbler  bool
+	Volt              uint8
+	SensorInformation uint8
+	// SensorInformationのビット構成
+	// bit[0-4] Reserved
+	// IsNewDribbler        bit[5]
+	// IsDetectDribbler     bit[6]
+	// IsDetectPhotoSensor  bit[7]
 	CapPower uint8
 }
 
@@ -65,10 +69,6 @@ var isRobotError = false
 
 var RobotErrorCode = 0
 var RobotErrorMessage = ""
-
-var doBuzzer = false
-var buzzerTone = 0
-var buzzerTime time.Duration = 0 * time.Millisecond
 
 var alarmIgnore = false
 
