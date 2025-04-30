@@ -88,11 +88,11 @@ func RunServer(chserver chan bool, MyID uint32) {
 
 		for {
 			// 左から1ビットだけを取り出す
-			detectPhotoSensor := 0b10000000&recvdata.SensorInformation != 0
+			detectPhotoSensor := 0b00000001&recvdata.SensorInformation != 0
 			// 左から2ビット目だけを取り出す
-			detectDribblerSensor := 0b01000000&recvdata.SensorInformation != 0
+			detectDribblerSensor := 0b00000010&recvdata.SensorInformation != 0
 			// 左から3ビット目だけを取り出す
-			isNewDribbler := 0b00100000&recvdata.SensorInformation != 0
+			isNewDribbler := 0b00000100&recvdata.SensorInformation != 0
 
 			pe := createStatus(uint32(MyID), detectPhotoSensor, detectDribblerSensor, isNewDribbler, uint32(recvdata.Volt), uint32(recvdata.CapPower), imageData.Is_ball_exit, imageData.Image_x, imageData.Image_y, minThreshold, maxThreshold, int32(ballDetectRadius), circularityThreshold)
 			Data, _ := proto.Marshal(pe)
