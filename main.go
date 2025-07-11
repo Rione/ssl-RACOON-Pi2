@@ -46,6 +46,115 @@ func kickCheck(chkicker chan bool) {
 
 func main() {
 
+	err := rpio.Open()
+	if err != nil {
+		log.Fatal("Error: ", err)
+	}
+
+	//button が押されているか確認
+	button1 := rpio.Pin(22)
+	button1.Input()
+	button1.PullUp()
+
+	if button1.Read()^1 == rpio.High {
+		log.Println("Button1 is pressed. Start Robot Control Mode")
+		isControlByRobotMode = true
+	}
+
+	rpio.Close()
+
+	//Hostnameを取得する
+	cmd := exec.Command("hostname")
+	out, err := cmd.Output()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(out))
+
+	//もし初期値のraspberrypiだったら
+	if string(out) == "raspberrypi\n" {
+		//UNIX時間の下5桁を取得する
+		unixtime := time.Now().UnixNano()
+		log.Println("Unixtime is " + fmt.Sprintf("%d", unixtime))
+		unixtime = unixtime % 100000
+
+		//Hostnameをracoon-XXXXXに変更する
+		hostname := "racoon-" + fmt.Sprintf("%05d", unixtime)
+
+		log.Println("Change Hostname To " + hostname)
+		//Change Hostname
+		//hostnamectl set-hostname raspberrypi コマンド実行
+		cmd = exec.Command("hostnamectl", "set-hostname", hostname)
+		cmd.Run()
+
+		//hostsの変更
+		cmd = exec.Command("sudo", "sed", "-i", "/etc/hosts", "-e", "s/raspberrypi/"+hostname+"/g", "/etc/hosts")
+		cmd.Run()
+
+		//再起動
+		log.Println("=====Reboot=====")
+
+		buzzer := rpio.Pin(12)
+		buzzer.Mode(rpio.Pwm)
+		buzzer.Freq(1175 * 64)
+		buzzer.DutyCycle(16, 32)
+		time.Sleep(500 * time.Millisecond)
+		buzzer.DutyCycle(0, 32)
+		buzzer.Freq(1396 * 64)
+		buzzer.DutyCycle(16, 32)
+		time.Sleep(500 * time.Millisecond)
+		buzzer.DutyCycle(0, 32)
+		buzzer.Freq(1760 * 64)
+		buzzer.DutyCycle(16, 32)
+		time.Sleep(500 * time.Millisecond)
+		buzzer.DutyCycle(0, 32)
+
+		//reboot コマンド実行
+		cmd = exec.Command("reboot")
+		cmd.Run()
+
+	}
+
+	if isControlByRobotMode {
+		log.Println("Robot Control Mode is ON")
+		out = []byte("localuser\n")
+	}
+
+	if string(out) == "localuser\n" {
+		//ラズパイのGPIOのメモリを確保
+		err := rpio.Open()
+		CheckError(err)
+		buzzer := rpio.Pin(13)
+		buzzer.Mode(rpio.Pwm)
+		buzzer.Freq(1175 * 64)
+		buzzer.DutyCycle(16, 32)
+		time.Sleep(1000 * time.Millisecond)
+		buzzer.DutyCycle(0, 32)
+		time.Sleep(1000 * time.Millisecond)
+
+		button1 := rpio.Pin(22)
+		button1.Input()
+		button1.PullUp()
+
+		if button1.Read()^1 == rpio.High {
+			isControlByRobotMode = true
+			log.Println("Robot Control Mode is ON")
+			buzzer.Freq(1244 * 64)
+			buzzer.DutyCycle(16, 32)
+			time.Sleep(100 * time.Millisecond)
+			buzzer.DutyCycle(0, 32)
+			time.Sleep(100 * time.Millisecond)
+			buzzer.Freq(1244 * 64)
+			buzzer.DutyCycle(16, 32)
+			time.Sleep(100 * time.Millisecond)
+			buzzer.DutyCycle(0, 32)
+			time.Sleep(100 * time.Millisecond)
+
+		} else {
+			os.Exit(0)
+		}
+	}
+
 	//自動アップデート
 	go confirmAndSelfUpdate()
 	//GPIOの初期化
@@ -100,54 +209,6 @@ func main() {
 			os.Exit(0)
 		}
 	}()
-
-	//Hostnameを取得する
-	cmd := exec.Command("hostname")
-	out, err := cmd.Output()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(out))
-
-	//もし初期値のraspberrypiだったら
-	if string(out) == "raspberrypi\n" {
-		//UNIX時間の下5桁を取得する
-		unixtime := time.Now().UnixNano()
-		log.Println("Unixtime is " + fmt.Sprintf("%d", unixtime))
-		unixtime = unixtime % 100000
-
-		//Hostnameをracoon-XXXXXに変更する
-		hostname := "racoon-" + fmt.Sprintf("%05d", unixtime)
-
-		log.Println("Change Hostname To " + hostname)
-		//Change Hostname
-		//hostnamectl set-hostname raspberrypi コマンド実行
-		cmd = exec.Command("hostnamectl", "set-hostname", hostname)
-		cmd.Run()
-
-		//再起動
-		log.Println("=====Reboot=====")
-
-		buzzer := rpio.Pin(12)
-		buzzer.Mode(rpio.Pwm)
-		buzzer.Freq(1175 * 64)
-		buzzer.DutyCycle(16, 32)
-		time.Sleep(500 * time.Millisecond)
-		buzzer.DutyCycle(0, 32)
-		buzzer.Freq(1396 * 64)
-		buzzer.DutyCycle(16, 32)
-		time.Sleep(500 * time.Millisecond)
-		buzzer.DutyCycle(0, 32)
-		buzzer.Freq(1760 * 64)
-		buzzer.DutyCycle(16, 32)
-		time.Sleep(500 * time.Millisecond)
-		buzzer.DutyCycle(0, 32)
-
-		//reboot コマンド実行
-		cmd = exec.Command("reboot")
-		cmd.Run()
-
-	}
 
 	//MyIDで指定したロボットIDを取得
 	var MyID uint32 = uint32(diptoid)

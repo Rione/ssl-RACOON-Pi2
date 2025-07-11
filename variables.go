@@ -29,6 +29,8 @@ type RecvStruct struct {
 	CapPower uint8
 }
 
+var isControlByRobotMode = false //ロボット制御モードのフラグ
+
 type SendStruct struct {
 	preamble      byte
 	velx          int16
@@ -40,8 +42,8 @@ type SendStruct struct {
 	relativeX     int16 // (mm)
 	relativeY     int16 // (mm)
 	relativeTheta int16 // (mrad)
-	cameraBallX   uint8
-	cameraBallY   uint8
+	cameraBallX   uint8 //カメラのボールの左右情報 (0~639px)
+	cameraBallY   uint8 //カメラからのボールまでの距離 (mm)
 	informations  uint8
 	// informations の ビット構成
 	// emgStop          bit[0]
@@ -82,8 +84,8 @@ var doDirectKick bool = false
 
 type ImageData struct {
 	Is_ball_exit bool    `json:"isball"`
-	Image_x      float32 `json:"image_x"`
-	Image_y      float32 `json:"image_y"`
+	Image_x      float32 `json:"x"`
+	Image_y      float32 `json:"y"`
 	Frame        string  `json:"frame"`
 }
 

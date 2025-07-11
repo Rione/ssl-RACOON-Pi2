@@ -178,7 +178,7 @@ func ReceiveData(chclient chan bool, MyID uint32, ip string) {
 	CheckError(err)
 	defer serverConn.Close()
 
-	buf := make([]byte, 10240)
+	buf := make([]byte, 20240)
 	for {
 		n, _, _ := serverConn.ReadFromUDP(buf)
 
@@ -189,6 +189,7 @@ func ReceiveData(chclient chan bool, MyID uint32, ip string) {
 		}
 
 		imageData = *jsonData
+
 		imageResponse.Frame = jsonData.Frame
 	}
 }
