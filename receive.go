@@ -189,6 +189,7 @@ func ReceiveData(chclient chan bool, MyID uint32, ip string) {
 		}
 
 		imageData = *jsonData
+
 		imageResponse.Frame = jsonData.Frame
 	}
 }

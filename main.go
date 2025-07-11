@@ -46,6 +46,23 @@ func kickCheck(chkicker chan bool) {
 
 func main() {
 
+	err := rpio.Open()
+	if err != nil {
+		log.Fatal("Error: ", err)
+	}
+
+	//button が押されているか確認
+	button1 := rpio.Pin(22)
+	button1.Input()
+	button1.PullUp()
+
+	if button1.Read()^1 == rpio.High {
+		log.Println("Button1 is pressed. Start Robot Control Mode")
+		isControlByRobotMode = true
+	}
+
+	rpio.Close()
+
 	//Hostnameを取得する
 	cmd := exec.Command("hostname")
 	out, err := cmd.Output()
@@ -96,6 +113,46 @@ func main() {
 		cmd = exec.Command("reboot")
 		cmd.Run()
 
+	}
+
+	if isControlByRobotMode {
+		log.Println("Robot Control Mode is ON")
+		out = []byte("localuser\n")
+	}
+
+	if string(out) == "localuser\n" {
+		//ラズパイのGPIOのメモリを確保
+		err := rpio.Open()
+		CheckError(err)
+		buzzer := rpio.Pin(13)
+		buzzer.Mode(rpio.Pwm)
+		buzzer.Freq(1175 * 64)
+		buzzer.DutyCycle(16, 32)
+		time.Sleep(1000 * time.Millisecond)
+		buzzer.DutyCycle(0, 32)
+		time.Sleep(1000 * time.Millisecond)
+
+		button1 := rpio.Pin(22)
+		button1.Input()
+		button1.PullUp()
+
+		if button1.Read()^1 == rpio.High {
+			isControlByRobotMode = true
+			log.Println("Robot Control Mode is ON")
+			buzzer.Freq(1244 * 64)
+			buzzer.DutyCycle(16, 32)
+			time.Sleep(100 * time.Millisecond)
+			buzzer.DutyCycle(0, 32)
+			time.Sleep(100 * time.Millisecond)
+			buzzer.Freq(1244 * 64)
+			buzzer.DutyCycle(16, 32)
+			time.Sleep(100 * time.Millisecond)
+			buzzer.DutyCycle(0, 32)
+			time.Sleep(100 * time.Millisecond)
+
+		} else {
+			os.Exit(0)
+		}
 	}
 
 	//自動アップデート

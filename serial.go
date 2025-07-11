@@ -10,8 +10,15 @@ import (
 )
 
 // シリアル通信部分
+
 var isReceived bool = false
 var pre_isReceived bool = false
+
+// imageData.Image_x, Image_y の一瞬0対策用
+var prevImageX int = 0
+var prevImageY int = 0
+var zeroCountX int = 0
+var zeroCountY int = 0
 
 func RunSerial(chclient chan bool, MyID uint32) {
 	port, err := serial.Open(SERIAL_PORT_NAME, &serial.Mode{})
@@ -111,6 +118,7 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		// }
 
 		//クライアントで受け取ったデータをバイト列に変更
+
 		sendbytes := sendarray.Bytes()
 
 		//バイト列がなかったら（初回受け取りを行っていない場合）、初期値を設定
@@ -118,8 +126,37 @@ func RunSerial(chclient chan bool, MyID uint32) {
 			sendbytes = []byte{0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 		}
 
-		//受信しなかった場合に自動的にモーターOFFする
-		if time.Since(last_recv_time) > 1*time.Second {
+		// image_x, image_y が一瞬0でも5回以内なら前の値を維持
+		if imageData.Image_x == 0 {
+			zeroCountX++
+			if zeroCountX <= 5 {
+				sendbytes[16] = byte(prevImageX)
+			} else {
+				sendbytes[16] = 0
+			}
+		} else {
+			sendbytes[16] = byte(imageData.Image_x)
+			prevImageX = int(imageData.Image_x)
+			zeroCountX = 0
+		}
+
+		if imageData.Image_y == 0 {
+			zeroCountY++
+			if zeroCountY <= 5 {
+				sendbytes[17] = byte(prevImageY)
+			} else {
+				sendbytes[17] = 0
+			}
+		} else {
+			sendbytes[17] = byte(imageData.Image_y)
+			prevImageY = int(imageData.Image_y)
+			zeroCountY = 0
+		}
+
+		// log.Println("X:", int(sendbytes[16]), "Y:", int(sendbytes[17]))
+
+		//受信しなかった場合に自動的にモーターOFFする(ロボット制御モードではない場合)
+		if time.Since(last_recv_time) > 1*time.Second && !isControlByRobotMode {
 			// log.Println("No Data Recv")
 			// disable velocity, dribble, kick
 			for i := 1; i <= 9; i++ {
@@ -132,6 +169,10 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		} else {
 			sendbytes[18] = sendbytes[18] | 0b00100000
 			isReceived = true
+		}
+
+		if isControlByRobotMode {
+			sendbytes[18] = sendbytes[18] | 0b01000000 //ロボット制御モードのビットを立てる
 		}
 
 		if time.Since(last_recv_time) > 15*time.Second {
