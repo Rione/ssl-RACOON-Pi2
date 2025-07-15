@@ -148,8 +148,8 @@ func RunSerial(chclient chan bool, MyID uint32) {
 				sendbytes[17] = 0
 			}
 		} else {
-			sendbytes[17] = byte(imageData.Image_y)
-			prevImageY = int(imageData.Image_y)
+			sendbytes[17] = byte(int(imageData.Image_y / 10))
+			prevImageY = int(imageData.Image_y / 10)
 			zeroCountY = 0
 		}
 
