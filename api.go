@@ -96,8 +96,8 @@ func HandleRequest(conn net.Conn) {
 			fmt.Fprintf(conn, "400 Bad Request\r\n")
 			return
 		}
-		// tone が 0 から 12 でない場合
-		if tone < 0 || tone > 15 {
+		// tone が 0 から 99 でない場合
+		if tone < 0 || tone > 99 {
 			fmt.Fprintf(conn, "HTTP/1.1 400 Bad Request\r\n")
 			fmt.Fprintf(conn, "Content-Type: text/plain; charset=utf-8\r\n\r\n")
 			fmt.Fprintf(conn, "400 Bad Request\r\n")
