@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -45,6 +46,17 @@ func kickCheck(chkicker chan bool) {
 }
 
 func main() {
+	// デバッグモードのフラグを解析
+	flag.BoolVar(&debugSerial, "ds", false, "シリアル送受信のモニタリングを有効化")
+	flag.BoolVar(&debugReceive, "dr", false, "AIからの受信結果表示を有効化")
+	flag.Parse()
+
+	if debugSerial {
+		log.Println("Debug Mode: Serial monitoring enabled (-ds)")
+	}
+	if debugReceive {
+		log.Println("Debug Mode: AI receive monitoring enabled (-dr)")
+	}
 
 	err := rpio.Open()
 	if err != nil {

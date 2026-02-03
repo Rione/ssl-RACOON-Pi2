@@ -97,6 +97,10 @@ type ImageResponse struct {
 
 var imageResponse ImageResponse
 
+// デバッグモードフラグ
+var debugSerial bool = false  // -ds: シリアル送受信のモニタリング
+var debugReceive bool = false // -dr: AIからの受信結果表示
+
 type Adjustment struct {
 	Min_Threshold         string  `json:"minThreshold"`
 	Max_Threshold         string  `json:"maxThreshold"`

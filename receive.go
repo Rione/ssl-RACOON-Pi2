@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"time"
@@ -41,10 +42,25 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 
 		robotcmd := packet.Commands.GetRobotCommands()
 
+		// デバッグモード: AI受信パケットの表示
+		if debugReceive {
+			log.Printf("[AI RX] Received packet with %d robot commands", len(robotcmd))
+		}
+
 		for _, v := range robotcmd {
 			// log.Printf("%d\n", int(v.GetId()))
 			//ロボットIDが自分のIDと一致したら、受信した情報を反映する
 			if v.GetId() == MyID {
+				// デバッグモード: AI受信データの詳細表示
+				if debugReceive {
+					log.Printf("[AI RX] === Robot ID: %d (Match) ===", v.GetId())
+					log.Printf("[AI RX] VelTangent: %.3f m/s, VelNormal: %.3f m/s, VelAngular: %.3f rad/s",
+						v.GetVeltangent(), v.GetVelnormal(), v.GetVelangular())
+					log.Printf("[AI RX] KickSpeedX: %.1f, KickSpeedZ: %.1f, Spinner: %t, Wheel1(DribblePower): %.1f",
+						v.GetKickspeedx(), v.GetKickspeedz(), v.GetSpinner(), v.GetWheel1())
+					fmt.Println("---")
+				}
+
 				Id := v.GetId()
 				Kickspeedx := v.GetKickspeedx()
 				if Kickspeedx >= 100 {

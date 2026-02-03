@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"log"
 	"time"
 
@@ -72,6 +73,12 @@ func RunSerial(chclient chan bool, MyID uint32) {
 		//バイナリから構造体に変換
 		err = binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata)
 		CheckError(err)
+
+		// デバッグモード: シリアル受信データの表示
+		if debugSerial {
+			log.Printf("[Serial RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
+				recvdata.Volt, float32(recvdata.Volt)*0.1, recvdata.SensorInformation, recvdata.CapPower)
+		}
 
 		//////////////////////////////////
 		///
@@ -197,6 +204,18 @@ func RunSerial(chclient chan bool, MyID uint32) {
 
 		//それぞれのデータを表示
 		// log.Printf("VOLT: %f, BALLSENS: %t, IMUDEG: %d\n", float32(recvdata.Volt)*0.1, recvdata.IsHoldBall, recvdata.ImuDir)
+
+		// デバッグモード: シリアル送信データの表示
+		if debugSerial {
+			velx := int16(sendbytes[1]) | int16(sendbytes[2])<<8
+			vely := int16(sendbytes[3]) | int16(sendbytes[4])<<8
+			velang := int16(sendbytes[5]) | int16(sendbytes[6])<<8
+			log.Printf("[Serial TX] VelX: %d, VelY: %d, VelAng: %d, Dribble: %d, Kick: %d, Chip: %d, Info: 0b%08b",
+				velx, vely, velang, sendbytes[7], sendbytes[8], sendbytes[9], sendbytes[18])
+			log.Printf("[Serial TX] CamBallX: %d, CamBallY: %d, Raw: %v",
+				sendbytes[16], sendbytes[17], sendbytes)
+			fmt.Println("---")
+		}
 
 		port.Write(sendbytes) //書き込み
 
