@@ -53,19 +53,19 @@ func RunGPIO(chgpio chan bool) {
 	// time.Sleep(time.Millisecond * 100)
 	// buzzer.DutyCycle(0, 32)
 
-	ringBuzzer(13, 300*time.Millisecond,0)  //シ
-	ringBuzzer(21, 300*time.Millisecond,0)  //ソ
-	ringBuzzer(16, 300*time.Millisecond,0)  //レ
-	ringBuzzer(21, 300*time.Millisecond,0)  //ソ
-	ringBuzzer(11, 300*time.Millisecond,0) //ラ
-	ringBuzzer(16, 300*time.Millisecond,0) //レ
+	ringBuzzer(13, 200*time.Millisecond,0)  //シ
+	ringBuzzer(9, 200*time.Millisecond,0)  //ソ
+	ringBuzzer(4, 200*time.Millisecond,0)  //レ
+	ringBuzzer(9, 200*time.Millisecond,0)  //ソ
+	ringBuzzer(11, 200*time.Millisecond,0) //ラ
+	ringBuzzer(16, 200*time.Millisecond,0) //レ
 	time.Sleep(50 * time.Millisecond)
-	ringBuzzer(16, 300*time.Millisecond,0) //レ
-	ringBuzzer(11, 300*time.Millisecond,0) //ラ
-	ringBuzzer(13, 300*time.Millisecond,0)  //シ
-	ringBuzzer(11, 300*time.Millisecond,0) //ラ
-	ringBuzzer(21, 300*time.Millisecond,0)  //ソ
-	ringBuzzer(16, 300*time.Millisecond,0) //レ
+	ringBuzzer(4, 200*time.Millisecond,0) //レ
+	ringBuzzer(11, 200*time.Millisecond,0) //ラ
+	ringBuzzer(13, 200*time.Millisecond,0)  //シ
+	ringBuzzer(11, 200*time.Millisecond,0) //ラ
+	ringBuzzer(4, 200*time.Millisecond,0) //レ
+	ringBuzzer(9, 200*time.Millisecond,0)  //ソ
 
 	// ringBuzzer(0, 1000*time.Millisecond)  //ラ#
 	// ringBuzzer(1, 1000*time.Millisecond)  //シ
