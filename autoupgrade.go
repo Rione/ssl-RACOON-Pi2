@@ -5,45 +5,50 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/joho/godotenv"
-
 	"github.com/blang/semver"
+	"github.com/joho/godotenv"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
-var version string
+// appVersion はビルド時に埋め込まれるバージョン情報である
+var appVersion string
 
+const (
+	githubRepo = "Rione/ssl-RACOON-Pi2"
+)
+
+// getVersion は現在のアプリケーションバージョンを取得する
 func getVersion() string {
-	if version != "" {
-		// バージョン情報が埋め込まれている時
-		return version
+	if appVersion != "" {
+		return appVersion
 	}
-	i, ok := debug.ReadBuildInfo()
-	log.Println(debug.ReadBuildInfo())
+
+	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "unknown"
 	}
-	log.Println(i.Main.Version)
-	return i.Main.Version
+
+	log.Println("Build version:", buildInfo.Main.Version)
+	return buildInfo.Main.Version
 }
 
+// confirmAndSelfUpdate はGitHubから最新版を確認し、必要に応じて自動更新を行う
 func confirmAndSelfUpdate() {
-	var version = getVersion()
-	log.Println("Current version:", version)
+	currentVersion := getVersion()
+	log.Println("Current version:", currentVersion)
 
-	if version == "(devel)" || version == "unknown" {
-		log.Println("NO VERSION INFO(DEV VERSION)")
+	if currentVersion == "(devel)" || currentVersion == "unknown" {
+		log.Println("NO VERSION INFO (DEV VERSION)")
 		return
 	}
 
-	// selfupdate.EnableLog()
-	// .envファイルを読み込む
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Error loading .env file")
+	// .envファイルからGitHubトークンを読み込む
+	if err := godotenv.Load(); err != nil {
+		log.Println("Error loading .env file:", err)
 		return
 	}
-	up, err := selfupdate.NewUpdater(selfupdate.Config{
+
+	updater, err := selfupdate.NewUpdater(selfupdate.Config{
 		APIToken: os.Getenv("GITHUB_TOKEN"),
 	})
 	if err != nil {
@@ -51,29 +56,30 @@ func confirmAndSelfUpdate() {
 		return
 	}
 
-	latest, found, err := up.DetectLatest("Rione/ssl-RACOON-Pi2")
+	latest, found, err := updater.DetectLatest(githubRepo)
 	if err != nil {
 		log.Println("Error occurred while detecting version:", err)
 		return
 	}
+
 	if !found {
 		log.Println("No releases found")
 		return
 	}
 
-	v := semver.MustParse(version)
-	if !found || latest.Version.Equals(v) || !latest.Version.GT(v) {
+	currentSemVer := semver.MustParse(currentVersion)
+	if latest.Version.Equals(currentSemVer) || !latest.Version.GT(currentSemVer) {
 		log.Println("Current version is the latest")
 		return
 	}
+
 	log.Println("New version available:", latest.Version)
 
-	latest, err = up.UpdateSelf(v, "Rione/ssl-RACOON-Pi2")
-	if err != nil {
+	if _, err = updater.UpdateSelf(currentSemVer, githubRepo); err != nil {
 		log.Println("Error occurred while updating binary:", err)
 		return
 	}
-	log.Println("Successfully updated to version", latest.Version)
 
+	log.Println("Successfully updated to version", latest.Version)
 	os.Exit(1)
 }

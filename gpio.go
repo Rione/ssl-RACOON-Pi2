@@ -9,191 +9,202 @@ import (
 	"github.com/stianeikeland/go-rpio/v4"
 )
 
-// GPIO処理部分
-func RunGPIO(chgpio chan bool) {
+// LED点滅速度
+const (
+	LED_BLINK_NORMAL = 500 * time.Millisecond // 通常時の点滅間隔
+	LED_BLINK_FAST   = 75 * time.Millisecond  // 高速点滅間隔
+)
 
-	//ラズパイのGPIOのメモリを確保
-	err := rpio.Open()
-	CheckError(err)
+// RunGPIO はGPIOの制御を行うメインループである
+func RunGPIO(done <-chan struct{}) {
+	if err := rpio.Open(); err != nil {
+		CheckError(err)
+	}
 
-	//GPIO18をLED1に設定。出力
-	led := rpio.Pin(18)
+	// LED初期化
+	led := rpio.Pin(PIN_LED1)
 	led.Output()
+	led2 := rpio.Pin(PIN_LED2)
+	led2.Output()
 
-	//GPIO27をLED2に設定。出力
-	led2 := rpio.Pin(27)
-	led.Output()
-
-	//GPIO22をbutton1に設定。入力(S2)
-	button1 := rpio.Pin(22)
+	// ボタン初期化
+	button1 := rpio.Pin(PIN_BUTTON1)
 	button1.Input()
 	button1.PullUp()
-
-	//GPIO 24をbutton2に設定。入力(S3)
-	button2 := rpio.Pin(24)
+	button2 := rpio.Pin(PIN_BUTTON2)
 	button2.Input()
 	button2.PullUp()
 
-	// ここで音楽を鳴らす
-	// buzzer.Freq(1244 * 64)
-	// buzzer.DutyCycle(16, 32)
-	// time.Sleep(time.Millisecond * 100)
-	// buzzer.Freq(1108 * 64)
-	// time.Sleep(time.Millisecond * 100)
-	// buzzer.Freq(739 * 64)
-	// time.Sleep(time.Millisecond * 150)
-	// buzzer.DutyCycle(0, 32)
-	// time.Sleep(time.Millisecond * 100)
-	// buzzer.Freq(1479 * 64)
-	// buzzer.DutyCycle(16, 32)
-	// time.Sleep(time.Millisecond * 100)
-	// buzzer.DutyCycle(0, 32)
-	// time.Sleep(time.Millisecond * 100)
-	// buzzer.DutyCycle(16, 32)
-	// time.Sleep(time.Millisecond * 100)
-	// buzzer.DutyCycle(0, 32)
+	// 起動メロディを再生
+	playStartupMelody()
 
-	ringBuzzer(13, 150*time.Millisecond,0)  //シ
-	ringBuzzer(9, 150*time.Millisecond,0)  //ソ
-	ringBuzzer(4, 150*time.Millisecond,0)  //レ
-	ringBuzzer(9, 150*time.Millisecond,0)  //ソ
-	ringBuzzer(11, 150*time.Millisecond,0) //ラ
-	ringBuzzer(16, 300*time.Millisecond,0) //レ
+	// DIPスイッチの状態を表示（デバッグ用）
+	printDIPStatus()
+
+	// メインループ
+	ledInterval := LED_BLINK_NORMAL
+	alarmVoltage := BATTERY_LOW_THRESHOLD
+
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			if recvdata.Volt <= uint8(alarmVoltage) {
+				handleBatteryAlarm(led2, button1, &alarmVoltage)
+			} else {
+				ledInterval = handleNormalOperation(led, button1, button2, ledInterval)
+			}
+		}
+	}
+}
+
+// playStartupMelody は起動時のメロディを再生する
+func playStartupMelody() {
+	// メロディ: シ-ソ-レ-ソ-ラ-レ（休符）レ-ラ-シ-ラ-レ-ソ
+	melody := []struct {
+		tone     int
+		duration time.Duration
+	}{
+		{13, 150 * time.Millisecond}, // シ
+		{9, 150 * time.Millisecond},  // ソ
+		{4, 150 * time.Millisecond},  // レ
+		{9, 150 * time.Millisecond},  // ソ
+		{11, 150 * time.Millisecond}, // ラ
+		{16, 300 * time.Millisecond}, // レ
+	}
+
+	for _, note := range melody {
+		ringBuzzer(note.tone, note.duration, 0)
+	}
+
 	time.Sleep(75 * time.Millisecond)
-	ringBuzzer(4, 150*time.Millisecond,0) //レ
-	ringBuzzer(11, 150*time.Millisecond,0) //ラ
-	ringBuzzer(13, 150*time.Millisecond,0)  //シ
-	ringBuzzer(11, 150*time.Millisecond,0) //ラ
-	ringBuzzer(4, 150*time.Millisecond,0) //レ
-	ringBuzzer(9, 300*time.Millisecond,0)  //ソ
 
-	// ringBuzzer(0, 1000*time.Millisecond)  //ラ#
-	// ringBuzzer(1, 1000*time.Millisecond)  //シ
-	// ringBuzzer(2, 1000*time.Millisecond)  //ド
-	// ringBuzzer(3, 1000*time.Millisecond)  //ド#
-	// ringBuzzer(4, 1000*time.Millisecond)  //レ
-	// ringBuzzer(5, 1000*time.Millisecond)  //レ#
-	// ringBuzzer(6, 1000*time.Millisecond)  //ミ
-	// ringBuzzer(7, 1000*time.Millisecond)  //ファ
-	// ringBuzzer(8, 1000*time.Millisecond)  //ファ#
-	// ringBuzzer(9, 1000*time.Millisecond)  //ソ
-	// ringBuzzer(10, 1000*time.Millisecond) //ソ#
-	// ringBuzzer(11, 1000*time.Millisecond) //ラ
-	// ringBuzzer(12, 1000*time.Millisecond) //ラ#
-	// ringBuzzer(13, 1000*time.Millisecond) //シ
-	// ringBuzzer(14, 1000*time.Millisecond) //ド
-	// ringBuzzer(15, 1000*time.Millisecond) //ド#
-	// ringBuzzer(16, 1000*time.Millisecond) //レ
-	// ringBuzzer(17, 1000*time.Millisecond) //レ#
-	// ringBuzzer(18, 1000*time.Millisecond) //ミ
-	// ringBuzzer(19, 1000*time.Millisecond) //ファ
-	// ringBuzzer(20, 1000*time.Millisecond) //ファ#
-	// ringBuzzer(21, 1000*time.Millisecond) //ソ
-	// ringBuzzer(22, 1000*time.Millisecond) //ソ#
+	melody2 := []struct {
+		tone     int
+		duration time.Duration
+	}{
+		{4, 150 * time.Millisecond},  // レ
+		{11, 150 * time.Millisecond}, // ラ
+		{13, 150 * time.Millisecond}, // シ
+		{11, 150 * time.Millisecond}, // ラ
+		{4, 150 * time.Millisecond},  // レ
+		{9, 300 * time.Millisecond},  // ソ
+	}
 
-	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
-	dip1 := rpio.Pin(4)
+	for _, note := range melody2 {
+		ringBuzzer(note.tone, note.duration, 0)
+	}
+}
+
+// printDIPStatus はDIPスイッチの状態を出力する
+func printDIPStatus() {
+	dip1 := rpio.Pin(PIN_DIP1)
 	dip1.Input()
 	dip1.PullUp()
-	dip2 := rpio.Pin(5)
+	dip2 := rpio.Pin(PIN_DIP2)
 	dip2.Input()
 	dip2.PullUp()
-	dip3 := rpio.Pin(6)
+	dip3 := rpio.Pin(PIN_DIP3)
 	dip3.Input()
 	dip3.PullUp()
-	dip4 := rpio.Pin(25)
+	dip4 := rpio.Pin(PIN_DIP4)
 	dip4.Input()
 	dip4.PullUp()
 
-	// DIP1, 2, 3 ,4 の状態を出力
 	fmt.Println("DIP1:", dip1.Read()^1)
 	fmt.Println("DIP2:", dip2.Read()^1)
 	fmt.Println("DIP3:", dip3.Read()^1)
 	fmt.Println("DIP4:", dip4.Read()^1)
 
-	//DIP 1, 2, 3, 4からhexを作成
 	hex := dip1.Read() ^ 1 + (dip2.Read()^1)*2 + (dip3.Read()^1)*4 + (dip4.Read()^1)*8
-
-	//hexを表示
 	fmt.Println("HEX:", int(hex))
+}
 
-	//Lチカ速度
-	ledsec := 500 * time.Millisecond
-	alarmVoltage := BATTERY_LOW_THRESHOULD
+// handleBatteryAlarm はバッテリー低下アラームを処理する
+func handleBatteryAlarm(led2, button1 rpio.Pin, alarmVoltage *int) {
+	log.Println("BATTERY ALARM")
+
 	for {
-		//電圧降下検知
-		if recvdata.Volt <= uint8(alarmVoltage) {
-			log.Println("BATTERY ALARM")
-			for {
-				if recvdata.Volt <= uint8(BATTERY_CRITICAL_THRESHOULD) {
-					ringBuzzer(25, 5000*time.Millisecond, 0)
-					continue
-				}
+		// 危険電圧の場合は長時間アラーム
+		if recvdata.Volt <= uint8(BATTERY_CRITICAL_THRESHOLD) {
+			ringBuzzer(25, 5000*time.Millisecond, 0)
+			continue
+		}
 
-				led2.High()
-				go ringBuzzer(25, 50*time.Millisecond, 0)
-				time.Sleep(60 * time.Millisecond)
-				go ringBuzzer(20, 90*time.Millisecond, 0)
-				led2.Low()
-				time.Sleep(120 * time.Millisecond)
+		// 警告アラーム
+		led2.High()
+		go ringBuzzer(25, 50*time.Millisecond, 0)
+		time.Sleep(60 * time.Millisecond)
+		go ringBuzzer(20, 90*time.Millisecond, 0)
+		led2.Low()
+		time.Sleep(120 * time.Millisecond)
 
-				if button1.Read()^1 == rpio.High || alarmIgnore {
-					//一時的にアラーム解除する
-					log.Println("BATTERY ALARM IGNORED")
-					alarmVoltage = BATTERY_CRITICAL_THRESHOULD
-					time.Sleep(100 * time.Millisecond)
-					go ringBuzzer(20, 20*time.Millisecond, 0)
-					time.Sleep(300 * time.Millisecond)
-					go ringBuzzer(20, 20*time.Millisecond, 0)
-					time.Sleep(300 * time.Millisecond)
-					go ringBuzzer(20, 20*time.Millisecond, 0)
-					time.Sleep(300 * time.Millisecond)
-					break
-				}
-			}
-		} else {
-			//通常チカチカ。ボタンが押されたら高速チカチカ
-			//button2はkickボタン
-			// buzzer.Freq(1479 * 64)
-			time.Sleep(ledsec)
-			led.Write(rpio.High)
-			if button1.Read()^1 == rpio.High {
-				ledsec = 75 * time.Millisecond
-				go ringBuzzer(20, 20*time.Millisecond, 0)
-			} else {
-				ledsec = 500 * time.Millisecond
-			}
-			if button2.Read()^1 == rpio.High {
-				go ringBuzzer(10, 50*time.Millisecond, 0)
-
-				//log.Println(button2.Read())
-				//kickする
-				//buzzer.DutyCycle(16, 32)
-				//time.Sleep(500 * time.Millisecond)
-				//buzzer.DutyCycle(0, 32)
-				//kicker_enable = true
-				//kicker_val = 100
-			}
-			time.Sleep(ledsec)
-			led.Write(rpio.Low)
+		// ボタンでアラーム解除
+		if button1.Read()^1 == rpio.High || alarmIgnore {
+			log.Println("BATTERY ALARM IGNORED")
+			*alarmVoltage = BATTERY_CRITICAL_THRESHOLD
+			playAlarmDismissSound()
+			break
 		}
 	}
 }
 
-func ringBuzzer(buzzerTone int, buzzerTime time.Duration, freq int) {
-	//GPIO12をブザーPWMに設定。出力
-	buzzer := rpio.Pin(13)
-	buzzer.Mode(rpio.Pwm)
+// playAlarmDismissSound はアラーム解除時の確認音を再生する
+func playAlarmDismissSound() {
+	for i := 0; i < 3; i++ {
+		time.Sleep(100 * time.Millisecond)
+		go ringBuzzer(20, 20*time.Millisecond, 0)
+		time.Sleep(300 * time.Millisecond)
+	}
+}
 
-	if freq == 0 {
-		freq = int(440*math.Pow(1.0595, float64(buzzerTone))) * 64
+// handleNormalOperation は通常のLED点滅とボタン処理を行う
+func handleNormalOperation(led, button1, button2 rpio.Pin, ledInterval time.Duration) time.Duration {
+	time.Sleep(ledInterval)
+	led.Write(rpio.High)
+
+	// ボタン1が押されたら高速点滅
+	if button1.Read()^1 == rpio.High {
+		ledInterval = LED_BLINK_FAST
+		go ringBuzzer(20, 20*time.Millisecond, 0)
 	} else {
-		freq = freq * 64
+		ledInterval = LED_BLINK_NORMAL
 	}
 
-	buzzer.Freq(freq)
+	// ボタン2が押されたら音を鳴らす
+	if button2.Read()^1 == rpio.High {
+		go ringBuzzer(10, 50*time.Millisecond, 0)
+	}
+
+	time.Sleep(ledInterval)
+	led.Write(rpio.Low)
+
+	return ledInterval
+}
+
+// ringBuzzer は指定されたトーンと長さでブザーを鳴らす
+// buzzerTone: 音階（0から始まる半音単位、0=A#, 440Hzベース）
+// buzzerTime: 再生時間
+// freq: 直接周波数指定（0の場合はbuzzerToneから計算）
+func ringBuzzer(buzzerTone int, buzzerTime time.Duration, freq int) {
+	buzzer := rpio.Pin(PIN_BUZZER)
+	buzzer.Mode(rpio.Pwm)
+
+	// 周波数の計算（PWMは64倍の値を使用）
+	const pwmMultiplier = 64
+	const baseFrequency = 440.0
+	const semitoneRatio = 1.0595 // 12平均律の半音比
+
+	var frequency int
+	if freq == 0 {
+		frequency = int(baseFrequency*math.Pow(semitoneRatio, float64(buzzerTone))) * pwmMultiplier
+	} else {
+		frequency = freq * pwmMultiplier
+	}
+
+	buzzer.Freq(frequency)
 	buzzer.DutyCycle(16, 32)
 	time.Sleep(buzzerTime)
 	buzzer.DutyCycle(0, 32)
-
 }

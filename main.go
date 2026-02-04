@@ -13,40 +13,109 @@ import (
 	"github.com/stianeikeland/go-rpio/v4"
 )
 
-// キッカーパワーが入力された時に、値を固定する関数
-// 並列での処理が行われる
-func kickCheck(chkicker chan bool) {
+// kickCheck はキッカーパワーが入力された時に、一定時間後に値をリセットする関数である
+// goroutineとして並列実行される
+func kickCheck(done <-chan struct{}) {
+	ticker := time.NewTicker(16 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
-		//ストレートキックが入力されたとき
-		if kicker_enable {
-			//500ミリ秒待つ
-			time.Sleep(500 * time.Millisecond)
-			//ストレートキックをオフにし、値を0にする
-			kicker_enable = false
-			kicker_val = 0
-			doDirectKick = false
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			// ストレートキックが入力されたとき
+			if kickerEnable {
+				time.Sleep(KICK_HOLD_DURATION)
+				kickerEnable = false
+				kickerVal = 0
+				doDirectKick = false
+			}
+			// チップキックが入力されたとき
+			if chipEnable {
+				time.Sleep(KICK_HOLD_DURATION)
+				chipEnable = false
+				chipVal = 0
+				doDirectChipKick = false
+			}
+			// IMUエラー状態のリセット
+			if imuError {
+				time.Sleep(KICK_HOLD_DURATION)
+				imuError = false
+			}
 		}
-		//チップキックが入力されたとき
-		if chip_enable {
-			//500ミリ秒待つ
-			time.Sleep(500 * time.Millisecond)
-			//チップキックをオフにし、値を0にする
-			chip_enable = false
-			chip_val = 0
-			doDirectChipKick = false
-		}
-		if imuError {
-			time.Sleep(500 * time.Millisecond)
-			imuError = false
-		}
-		//ループを行うため、少し待機する
-		time.Sleep(16 * time.Millisecond)
 	}
-	<-chkicker
 }
 
 func main() {
-	// デバッグモードのフラグを解析
+	parseFlags()
+
+	if checkInitialButtonState() {
+		log.Println("Button1 is pressed. Start Robot Control Mode")
+		isControlByRobotMode = true
+	}
+
+	hostname := getHostname()
+	fmt.Println(hostname)
+
+	// 初期ホスト名の場合、新しいホスト名を設定して再起動
+	if hostname == "raspberrypi\n" {
+		setupNewHostname()
+		return
+	}
+
+	// ロボット制御モードまたはローカルユーザーの場合
+	if isControlByRobotMode {
+		log.Println("Robot Control Mode is ON")
+		hostname = "localuser\n"
+	}
+
+	if hostname == "localuser\n" {
+		if !handleLocalUserMode() {
+			os.Exit(0)
+		}
+	}
+
+	// 自動アップデート
+	go confirmAndSelfUpdate()
+
+	// GPIOの初期化
+	if err := rpio.Open(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// DIPスイッチからロボットIDを読み取り
+	robotID := readRobotIDFromDIP()
+	fmt.Println("GOT ID FROM DIP SW:", robotID)
+
+	// ローカルIPアドレスを取得
+	ip := getLocalIP()
+	ipCamera := "127.0.0.1"
+
+	// シグナルハンドラの設定（Ctrl+C対応）
+	setupSignalHandler()
+
+	var myID uint32 = uint32(robotID)
+
+	// 終了シグナル用チャネル
+	done := make(chan struct{})
+
+	// 各goroutineを起動
+	go RunClient(done, myID, ip)
+	go RunServer(done, myID)
+	go RunSerial(done, myID)
+	go kickCheck(done)
+	go RunGPIO(done)
+	go RunApi(done, myID)
+	go ReceiveData(done, myID, ipCamera)
+
+	// 終了を待機（無限ループ）
+	select {}
+}
+
+// parseFlags はコマンドライン引数を解析する
+func parseFlags() {
 	flag.BoolVar(&debugSerial, "ds", false, "シリアル送受信のモニタリングを有効化")
 	flag.BoolVar(&debugReceive, "dr", false, "AIからの受信結果表示を有効化")
 	flag.Parse()
@@ -57,200 +126,155 @@ func main() {
 	if debugReceive {
 		log.Println("Debug Mode: AI receive monitoring enabled (-dr)")
 	}
+}
 
-	err := rpio.Open()
-	if err != nil {
+// checkInitialButtonState は起動時のボタン状態を確認する
+func checkInitialButtonState() bool {
+	if err := rpio.Open(); err != nil {
 		log.Fatal("Error: ", err)
 	}
+	defer rpio.Close()
 
-	//button が押されているか確認
-	button1 := rpio.Pin(22)
+	button1 := rpio.Pin(PIN_BUTTON1)
 	button1.Input()
 	button1.PullUp()
 
-	if button1.Read()^1 == rpio.High {
-		log.Println("Button1 is pressed. Start Robot Control Mode")
-		isControlByRobotMode = true
-	}
+	return button1.Read()^1 == rpio.High
+}
 
-	rpio.Close()
-
-	//Hostnameを取得する
+// getHostname は現在のホスト名を取得する
+func getHostname() string {
 	cmd := exec.Command("hostname")
 	out, err := cmd.Output()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(string(out))
+	return string(out)
+}
 
-	//もし初期値のraspberrypiだったら
-	if string(out) == "raspberrypi\n" {
-		//UNIX時間の下5桁を取得する
-		unixtime := time.Now().UnixNano()
-		log.Println("Unixtime is " + fmt.Sprintf("%d", unixtime))
-		unixtime = unixtime % 100000
+// setupNewHostname は新しいホスト名を設定し、システムを再起動する
+func setupNewHostname() {
+	// UNIX時間の下5桁を使用してユニークなホスト名を生成
+	unixtime := time.Now().UnixNano() % 100000
+	hostname := fmt.Sprintf("racoon-%05d", unixtime)
 
-		//Hostnameをracoon-XXXXXに変更する
-		hostname := "racoon-" + fmt.Sprintf("%05d", unixtime)
+	log.Printf("Unixtime is %d", time.Now().UnixNano())
+	log.Println("Change Hostname To " + hostname)
 
-		log.Println("Change Hostname To " + hostname)
-		//Change Hostname
-		//hostnamectl set-hostname raspberrypi コマンド実行
-		cmd = exec.Command("hostnamectl", "set-hostname", hostname)
-		cmd.Run()
+	// ホスト名を変更
+	exec.Command("hostnamectl", "set-hostname", hostname).Run()
+	exec.Command("sudo", "sed", "-i", "/etc/hosts", "-e", "s/raspberrypi/"+hostname+"/g", "/etc/hosts").Run()
 
-		//hostsの変更
-		cmd = exec.Command("sudo", "sed", "-i", "/etc/hosts", "-e", "s/raspberrypi/"+hostname+"/g", "/etc/hosts")
-		cmd.Run()
+	log.Println("=====Reboot=====")
 
-		//再起動
-		log.Println("=====Reboot=====")
+	// 再起動音を鳴らす
+	if err := rpio.Open(); err == nil {
+		playRebootMelody()
+		rpio.Close()
+	}
 
-		buzzer := rpio.Pin(12)
-		buzzer.Mode(rpio.Pwm)
-		buzzer.Freq(1175 * 64)
+	exec.Command("reboot").Run()
+}
+
+// playRebootMelody は再起動時のメロディを再生する
+func playRebootMelody() {
+	buzzer := rpio.Pin(PIN_BUZZER)
+	buzzer.Mode(rpio.Pwm)
+
+	notes := []int{1175, 1396, 1760}
+	for _, freq := range notes {
+		buzzer.Freq(freq * 64)
 		buzzer.DutyCycle(16, 32)
 		time.Sleep(500 * time.Millisecond)
 		buzzer.DutyCycle(0, 32)
-		buzzer.Freq(1396 * 64)
-		buzzer.DutyCycle(16, 32)
-		time.Sleep(500 * time.Millisecond)
-		buzzer.DutyCycle(0, 32)
-		buzzer.Freq(1760 * 64)
-		buzzer.DutyCycle(16, 32)
-		time.Sleep(500 * time.Millisecond)
-		buzzer.DutyCycle(0, 32)
-
-		//reboot コマンド実行
-		cmd = exec.Command("reboot")
-		cmd.Run()
-
 	}
+}
 
-	if isControlByRobotMode {
-		log.Println("Robot Control Mode is ON")
-		out = []byte("localuser\n")
-	}
-
-	if string(out) == "localuser\n" {
-		//ラズパイのGPIOのメモリを確保
-		err := rpio.Open()
-		CheckError(err)
-		buzzer := rpio.Pin(13)
-		buzzer.Mode(rpio.Pwm)
-		buzzer.Freq(1175 * 64)
-		buzzer.DutyCycle(16, 32)
-		time.Sleep(1000 * time.Millisecond)
-		buzzer.DutyCycle(0, 32)
-		time.Sleep(1000 * time.Millisecond)
-
-		button1 := rpio.Pin(22)
-		button1.Input()
-		button1.PullUp()
-
-		if button1.Read()^1 == rpio.High {
-			isControlByRobotMode = true
-			log.Println("Robot Control Mode is ON")
-			buzzer.Freq(1244 * 64)
-			buzzer.DutyCycle(16, 32)
-			time.Sleep(100 * time.Millisecond)
-			buzzer.DutyCycle(0, 32)
-			time.Sleep(100 * time.Millisecond)
-			buzzer.Freq(1244 * 64)
-			buzzer.DutyCycle(16, 32)
-			time.Sleep(100 * time.Millisecond)
-			buzzer.DutyCycle(0, 32)
-			time.Sleep(100 * time.Millisecond)
-
-		} else {
-			os.Exit(0)
-		}
-	}
-
-	//自動アップデート
-	go confirmAndSelfUpdate()
-	//GPIOの初期化
+// handleLocalUserMode はローカルユーザーモードの初期化を行う
+// ボタンが押されていればtrue、そうでなければfalseを返す
+func handleLocalUserMode() bool {
 	if err := rpio.Open(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		CheckError(err)
 	}
 
-	//GPIO 6, 25, 4, 5 を DIP 1, 2, 3, 4 に設定。入力
-	dip1 := rpio.Pin(4)
+	buzzer := rpio.Pin(PIN_BUZZER)
+	buzzer.Mode(rpio.Pwm)
+	buzzer.Freq(1175 * 64)
+	buzzer.DutyCycle(16, 32)
+	time.Sleep(1000 * time.Millisecond)
+	buzzer.DutyCycle(0, 32)
+	time.Sleep(1000 * time.Millisecond)
+
+	button1 := rpio.Pin(PIN_BUTTON1)
+	button1.Input()
+	button1.PullUp()
+
+	if button1.Read()^1 == rpio.High {
+		isControlByRobotMode = true
+		log.Println("Robot Control Mode is ON")
+		// 確認音を2回鳴らす
+		for i := 0; i < 2; i++ {
+			buzzer.Freq(1244 * 64)
+			buzzer.DutyCycle(16, 32)
+			time.Sleep(100 * time.Millisecond)
+			buzzer.DutyCycle(0, 32)
+			time.Sleep(100 * time.Millisecond)
+		}
+		return true
+	}
+	return false
+}
+
+// readRobotIDFromDIP はDIPスイッチからロボットIDを読み取る
+func readRobotIDFromDIP() int {
+	dip1 := rpio.Pin(PIN_DIP1)
 	dip1.Input()
 	dip1.PullUp()
-	dip2 := rpio.Pin(5)
+	dip2 := rpio.Pin(PIN_DIP2)
 	dip2.Input()
 	dip2.PullUp()
-	dip3 := rpio.Pin(6)
+	dip3 := rpio.Pin(PIN_DIP3)
 	dip3.Input()
 	dip3.PullUp()
-	dip4 := rpio.Pin(25)
+	dip4 := rpio.Pin(PIN_DIP4)
 	dip4.Input()
 	dip4.PullUp()
 
-	// HEXの値を表示
-	// DIP1, 2, 3 ,4 の状態を出力
 	fmt.Println("DIP1:", dip1.Read()^1)
 	fmt.Println("DIP2:", dip2.Read()^1)
 	fmt.Println("DIP3:", dip3.Read()^1)
 	fmt.Println("DIP4:", dip4.Read()^1)
-	hex := dip1.Read() ^ 1 + (dip2.Read()^1)*2 + (dip3.Read()^1)*4 + (dip4.Read()^1)*8
-	fmt.Println("GOT ID FROM DIP SW:", int(hex))
-	diptoid := int(hex)
 
+	return int(dip1.Read() ^ 1 + (dip2.Read()^1)*2 + (dip3.Read()^1)*4 + (dip4.Read()^1)*8)
+}
+
+// getLocalIP はローカルIPアドレスを取得する
+func getLocalIP() string {
 	netInterfaceAddresses, _ := net.InterfaceAddrs()
 
-	ip := "0.0.0.0"
-	ipCamera := "127.0.0.1"
 	for _, netInterfaceAddress := range netInterfaceAddresses {
-		networkIp, ok := netInterfaceAddress.(*net.IPNet)
-		if ok && !networkIp.IP.IsLoopback() && networkIp.IP.To4() != nil {
-			ip = networkIp.IP.String()
+		networkIP, ok := netInterfaceAddress.(*net.IPNet)
+		if ok && !networkIP.IP.IsLoopback() && networkIP.IP.To4() != nil {
+			return networkIP.IP.String()
 		}
 	}
+	return "0.0.0.0"
+}
 
-	//Ctrl+Cを押したときに終了するようにする
+// setupSignalHandler はCtrl+Cなどのシグナルハンドラを設定する
+func setupSignalHandler() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
-			//終了時にGPIOを解放する
 			rpio.Close()
 			log.Println("Bye")
 			os.Exit(0)
 		}
 	}()
-
-	//MyIDで指定したロボットIDを取得
-	var MyID uint32 = uint32(diptoid)
-
-	chclient := make(chan bool)
-	chserver := make(chan bool)
-	chserial := make(chan bool)
-	chkick := make(chan bool)
-	chgpio := make(chan bool)
-	chapi := make(chan bool)
-	chreceive := make(chan bool)
-
-	//各並列処理部分
-	go RunClient(chclient, MyID, ip)
-	go RunServer(chserver, MyID)
-	go RunSerial(chserial, MyID)
-	go kickCheck(chkick)
-	go RunGPIO(chgpio)
-	go RunApi(chapi, MyID)
-	go ReceiveData(chreceive, MyID, ipCamera)
-
-	<-chclient
-	<-chserver
-	<-chserial
-	<-chkick
-	<-chgpio
-	<-chapi
-	<-chreceive
 }
 
+// CheckError はエラーがあれば致命的エラーとしてログ出力して終了する
 func CheckError(err error) {
 	if err != nil {
 		log.Fatal("Error: ", err)

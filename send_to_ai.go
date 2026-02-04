@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"time"
@@ -11,96 +12,129 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func createStatus(robotid uint32, isdetectphotosensor bool, isdetectdribbler bool, isnewdribbler bool, batt uint32, cappower uint32, is_ball_exit bool, image_x float32, image_y float32, minthreshold string, maxthreshold string, balldetectradius int32, circularitythreshold float32) *pb_gen.PiToMw {
+const (
+	thresholdFile  = "threshold.json"
+	sendInterval   = 100 * time.Millisecond
+)
+
+// createStatus はRACOON-MWに送信するステータスメッセージを作成する
+func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbler bool,
+	batteryVoltage, capPower uint32, isBallExit bool, imageX, imageY float32,
+	minThreshold, maxThreshold string, ballDetectRadius int32, circularityThreshold float32) *pb_gen.PiToMw {
 	return &pb_gen.PiToMw{
 		RobotsStatus: &pb_gen.Robot_Status{
-			RobotId:                &robotid,
-			IsDetectPhotoSensor:    &isdetectphotosensor,
-			IsDetectDribblerSensor: &isdetectdribbler,
-			IsNewDribbler:          &isnewdribbler,
-			BatteryVoltage:         &batt,
-			CapPower:               &cappower,
+			RobotId:                &robotID,
+			IsDetectPhotoSensor:    &detectPhotoSensor,
+			IsDetectDribblerSensor: &detectDribbler,
+			IsNewDribbler:          &isNewDribbler,
+			BatteryVoltage:         &batteryVoltage,
+			CapPower:               &capPower,
 		},
 		BallStatus: &pb_gen.Ball_Status{
-			IsBallExit:  &is_ball_exit,
-			BallCameraX: &image_x,
-			BallCameraY: &image_y,
+			IsBallExit:  &isBallExit,
+			BallCameraX: &imageX,
+			BallCameraY: &imageY,
 		},
 		Ball: &pb_gen.Ball{
-			MinThreshold:         &minthreshold,
-			MaxThreshold:         &maxthreshold,
-			BallDetectRadius:     &balldetectradius,
-			CircularityThreshold: &circularitythreshold,
+			MinThreshold:         &minThreshold,
+			MaxThreshold:         &maxThreshold,
+			BallDetectRadius:     &ballDetectRadius,
+			CircularityThreshold: &circularityThreshold,
 		},
 	}
 }
 
-// RACOON-MWにボールセンサ等の情報を送信するためのサーバ
-func RunServer(chserver chan bool, MyID uint32) {
-	ipv4 := "224.5.69.4"
-	port := "16941"
-	addr := ipv4 + ":" + port
-
+// RunServer はRACOON-MWにボールセンサ等の情報を送信するサーバーである
+func RunServer(done <-chan struct{}, myID uint32) {
+	addr := MULTICAST_ADDR + ":" + MULTICAST_PORT
 	fmt.Println("Sender:", addr)
+
 	conn, err := net.Dial("udp", addr)
 	CheckError(err)
 	defer conn.Close()
 
-	if _, err := os.Stat("threshold.json"); os.IsNotExist(err) {
-		//jsonファイルを作成
-		file, err := os.Create("threshold.json")
-		if err != nil {
-			fmt.Println(err)
+	// しきい値設定を読み込む（存在しなければ作成）
+	adjustment := loadOrCreateThresholdConfig()
+
+	ticker := time.NewTicker(sendInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
 			return
+		case <-ticker.C:
+			sendStatusToMW(conn, myID, adjustment)
 		}
-		defer file.Close()
+	}
+}
 
-		data := Adjustment{Min_Threshold: "1, 120, 100", Max_Threshold: "15, 255, 255", Ball_Detect_Radius: 150, Circularity_Threshold: 0.2}
-		jsonData, err := json.Marshal(data)
-		if err != nil {
-			fmt.Println(err)
-			return
+// loadOrCreateThresholdConfig はしきい値設定を読み込むか、存在しなければデフォルト値で作成する
+func loadOrCreateThresholdConfig() Adjustment {
+	if _, err := os.Stat(thresholdFile); os.IsNotExist(err) {
+		// ファイルが存在しない場合、デフォルト値で作成
+		if err := saveAdjustmentConfig(defaultAdjustment); err != nil {
+			log.Printf("しきい値ファイル作成エラー: %v", err)
 		}
-		_, err = file.Write(jsonData)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-	} else {
-		var minThreshold string
-		var maxThreshold string
-		var ballDetectRadius int
-		var circularityThreshold float32
+		return defaultAdjustment
+	}
 
-		file, err := os.Open("threshold.json")
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		defer file.Close()
+	// ファイルから読み込み
+	file, err := os.Open(thresholdFile)
+	if err != nil {
+		log.Printf("しきい値ファイル読み込みエラー: %v", err)
+		return defaultAdjustment
+	}
+	defer file.Close()
 
-		decoder := json.NewDecoder(file)
-		err = decoder.Decode(&Adjustment{Min_Threshold: minThreshold, Max_Threshold: maxThreshold, Ball_Detect_Radius: ballDetectRadius, Circularity_Threshold: circularityThreshold})
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+	var adjustment Adjustment
+	if err := json.NewDecoder(file).Decode(&adjustment); err != nil {
+		log.Printf("しきい値JSONデコードエラー: %v", err)
+		return defaultAdjustment
+	}
 
-		for {
-			// 左から1ビットだけを取り出す
-			detectPhotoSensor := 0b00000001&recvdata.SensorInformation != 0
-			// 左から2ビット目だけを取り出す
-			detectDribblerSensor := 0b00000010&recvdata.SensorInformation != 0
-			// 左から3ビット目だけを取り出す
-			isNewDribbler := 0b00000100&recvdata.SensorInformation != 0
+	return adjustment
+}
 
-			pe := createStatus(uint32(MyID), detectPhotoSensor, detectDribblerSensor, isNewDribbler, uint32(recvdata.Volt), uint32(recvdata.CapPower), imageData.Is_ball_exit, imageData.Image_x, imageData.Image_y, minThreshold, maxThreshold, int32(ballDetectRadius), circularityThreshold)
-			Data, _ := proto.Marshal(pe)
+// saveAdjustmentConfig はしきい値設定をファイルに保存する
+func saveAdjustmentConfig(adjustment Adjustment) error {
+	jsonData, err := json.Marshal(adjustment)
+	if err != nil {
+		return fmt.Errorf("JSON変換エラー: %w", err)
+	}
+	return os.WriteFile(thresholdFile, jsonData, 0644)
+}
 
-			conn.Write([]byte(Data))
+// sendStatusToMW はRACOON-MWにステータス情報を送信する
+func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
+	// センサー情報をビットマスクで取得
+	detectPhotoSensor := recvdata.SensorInformation&SENSOR_PHOTO_MASK != 0
+	detectDribblerSensor := recvdata.SensorInformation&SENSOR_DRIBBLER_MASK != 0
+	isNewDribbler := recvdata.SensorInformation&SENSOR_NEW_DRIB_MASK != 0
 
-			time.Sleep(100 * time.Millisecond)
-		}
+	status := createStatus(
+		myID,
+		detectPhotoSensor,
+		detectDribblerSensor,
+		isNewDribbler,
+		uint32(recvdata.Volt),
+		uint32(recvdata.CapPower),
+		imageData.IsBallExit,
+		imageData.ImageX,
+		imageData.ImageY,
+		adjustment.MinThreshold,
+		adjustment.MaxThreshold,
+		int32(adjustment.BallDetectRadius),
+		adjustment.CircularityThreshold,
+	)
 
+	data, err := proto.Marshal(status)
+	if err != nil {
+		log.Printf("Protobuf marshal error: %v", err)
+		return
+	}
+
+	if _, err := conn.Write(data); err != nil {
+		log.Printf("UDP send error: %v", err)
 	}
 }

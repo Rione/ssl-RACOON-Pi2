@@ -13,12 +13,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// AIからの情報を受信するクライアント
-func RunClient(chclient chan bool, MyID uint32, ip string) {
+// ダイレクトキック判定用のしきい値
+const directKickThreshold float32 = 100
 
+// RunClient はAIからの制御コマンドを受信するUDPクライアントである
+func RunClient(done <-chan struct{}, myID uint32, ip string) {
 	serverAddr := &net.UDPAddr{
 		IP:   net.ParseIP(ip),
-		Port: 20011,
+		Port: UDP_RECV_PORT,
 	}
 
 	serverConn, err := net.ListenUDP("udp", serverAddr)
@@ -28,184 +30,162 @@ func RunClient(chclient chan bool, MyID uint32, ip string) {
 	buf := make([]byte, 1024)
 
 	for {
-		n, _, _ := serverConn.ReadFromUDP(buf)
-		last_recv_time = time.Now()
-		packet := &pb_gen.GrSim_Packet{}
-		err = proto.Unmarshal(buf[0:n], packet)
+		select {
+		case <-done:
+			return
+		default:
+			n, _, _ := serverConn.ReadFromUDP(buf)
+			lastRecvTime = time.Now()
 
-		if err != nil {
-			log.Fatal("Error: ", err)
-		}
-
-		//受信元表示
-		// log.Printf("Data received from %s", addr)
-
-		robotcmd := packet.Commands.GetRobotCommands()
-
-		// デバッグモード: AI受信パケットの表示
-		if debugReceive {
-			log.Printf("[AI RX] Received packet with %d robot commands", len(robotcmd))
-		}
-
-		for _, v := range robotcmd {
-			// log.Printf("%d\n", int(v.GetId()))
-			//ロボットIDが自分のIDと一致したら、受信した情報を反映する
-			if v.GetId() == MyID {
-				// デバッグモード: AI受信データの詳細表示
-				if debugReceive {
-					log.Printf("[AI RX] === Robot ID: %d (Match) ===", v.GetId())
-					log.Printf("[AI RX] VelTangent: %.3f m/s, VelNormal: %.3f m/s, VelAngular: %.3f rad/s",
-						v.GetVeltangent(), v.GetVelnormal(), v.GetVelangular())
-					log.Printf("[AI RX] KickSpeedX: %.1f, KickSpeedZ: %.1f, Spinner: %t, Wheel1(DribblePower): %.1f",
-						v.GetKickspeedx(), v.GetKickspeedz(), v.GetSpinner(), v.GetWheel1())
-					fmt.Println("---")
-				}
-
-				Id := v.GetId()
-				Kickspeedx := v.GetKickspeedx()
-				if Kickspeedx >= 100 {
-					doDirectKick = true
-					Kickspeedx -= 100
-				}
-				Kickspeedz := v.GetKickspeedz()
-				if Kickspeedz >= 100 {
-					doDirectChipKick = true
-					Kickspeedz -= 100
-				}
-				Veltangent := float64(v.GetVeltangent())
-				Velnormal := float64(v.GetVelnormal())
-				Velangular := float64(v.GetVelangular())
-				Spinner := v.GetSpinner()
-
-				var SpinnerVel float32 = 0
-				if Spinner {
-					SpinnerVel = v.GetWheel1()
-					if SpinnerVel > 100 {
-						SpinnerVel = 100
-					} else if SpinnerVel < 0 {
-						SpinnerVel = 0
-					}
-					// log.Printf("SpinnerVel: %f", SpinnerVel)
-				}
-
-				if Kickspeedx > 0 || Kickspeedz > 0 {
-					log.Printf("ID        : %d", Id)
-					log.Printf("Kickspeedx: %f", v.GetKickspeedx())
-					log.Printf("Kickspeedz: %f", v.GetKickspeedz())
-					log.Printf("Veltangent: %f", Veltangent)
-					log.Printf("Velnormal : %f", Velnormal)
-
-					log.Printf("Velangular: %f", Velangular)
-					log.Printf("Spinner   : %t", Spinner)
-				}
-
-				bytearray := SendStruct{}                   //送信用構造体
-				bytearray.velx = int16(Veltangent * 1000)   //m/s
-				bytearray.vely = int16(Velnormal * 1000)    //m/s
-				bytearray.velang = int16(Velangular * 1000) // mrad/sに変換
-
-				bytearray.preamble = 0xFF //プリアンブル
-
-				if Spinner {
-					bytearray.dribblePower = uint8(SpinnerVel) //ドリブラ情報
-				} else {
-					bytearray.dribblePower = 0 //ドリブラ情報
-				}
-
-				if Kickspeedx > 0 {
-					kicker_val = uint8(Kickspeedx * 10)
-					kicker_enable = true
-				}
-				if kicker_enable {
-					bytearray.kickPower = kicker_val //キッカー情報
-				} else {
-					bytearray.kickPower = 0 //キッカー情報
-				}
-				if Kickspeedz > 0 {
-					chip_val = uint8(Kickspeedz * 10)
-					chip_enable = true
-				}
-				if chip_enable {
-					bytearray.chipPower = chip_val //チップ情報
-				} else {
-					bytearray.chipPower = 0 //チップ情報
-				}
-
-				//相対位置情報
-				bytearray.relativeX = 0
-				bytearray.relativeY = 0
-				bytearray.relativeTheta = 0
-
-				//カメラ情報
-				bytearray.cameraBallX = 0
-				bytearray.cameraBallY = 0
-
-				//informationsのemgStopを0にする
-				bytearray.informations = bytearray.informations & 0b11111110
-
-				//ダイレクトキックならば、doDirectKickを1にする
-				if doDirectKick {
-					bytearray.informations = bytearray.informations | 0b00000010
-				}
-
-				//ダイレクトチップならば、doDirectChipKickを1にする
-				if doDirectChipKick {
-					bytearray.informations = bytearray.informations | 0b00000100
-				}
-
-				// 充電を行う
-				var doCharge bool = true
-				if doCharge {
-					bytearray.informations = bytearray.informations | 0b00010000
-				}
-
-				// //パリティビットを計算
-				// parity := byte(0)
-				// for i := 0; i < 7; i++ {
-				// 	parity ^= byte(bytearray.velx >> uint(i) & 0x01)
-				// 	parity ^= byte(bytearray.vely >> uint(i) & 0x01)
-				// 	parity ^= byte(bytearray.velang >> uint(i) & 0x01)
-				// 	parity ^= byte(bytearray.dribblePower >> uint(i) & 0x01)
-				// 	parity ^= byte(bytearray.kickPower >> uint(i) & 0x01)
-				// 	parity ^= byte(bytearray.chipPower >> uint(i) & 0x01)
-				// 	parity ^= byte(bytearray.informations >> uint(i) & 0x01)
-				// }
-				// bytearray.informations = bytearray.informations | (parity << 7)
-
-				//バイナリに変換
-				sendarray = bytes.Buffer{}
-				err := binary.Write(&sendarray, binary.LittleEndian, bytearray) //バイナリに変換
-				if err != nil {
-					log.Fatal(err)
-				}
+			packet := &pb_gen.GrSim_Packet{}
+			if err := proto.Unmarshal(buf[0:n], packet); err != nil {
+				log.Fatal("Error: ", err)
 			}
-		}
-		// log.Println("======================================")
-	}
 
+			processRobotCommands(packet, myID)
+		}
+	}
 }
 
-func ReceiveData(chclient chan bool, MyID uint32, ip string) {
+// processRobotCommands はロボットコマンドを処理する
+func processRobotCommands(packet *pb_gen.GrSim_Packet, myID uint32) {
+	robotCmds := packet.Commands.GetRobotCommands()
+
+	if debugReceive {
+		log.Printf("[AI RX] Received packet with %d robot commands", len(robotCmds))
+	}
+
+	for _, cmd := range robotCmds {
+		if cmd.GetId() != myID {
+			continue
+		}
+
+		if debugReceive {
+			logReceivedCommand(cmd)
+		}
+
+		processCommand(cmd)
+	}
+}
+
+// logReceivedCommand はデバッグ用にコマンドをログ出力する
+func logReceivedCommand(cmd *pb_gen.GrSim_Robot_Command) {
+	log.Printf("[AI RX] === Robot ID: %d (Match) ===", cmd.GetId())
+	log.Printf("[AI RX] VelTangent: %.3f m/s, VelNormal: %.3f m/s, VelAngular: %.3f rad/s",
+		cmd.GetVeltangent(), cmd.GetVelnormal(), cmd.GetVelangular())
+	log.Printf("[AI RX] KickSpeedX: %.1f, KickSpeedZ: %.1f, Spinner: %t, Wheel1(DribblePower): %.1f",
+		cmd.GetKickspeedx(), cmd.GetKickspeedz(), cmd.GetSpinner(), cmd.GetWheel1())
+	fmt.Println("---")
+}
+
+// processCommand はロボットコマンドを処理し、送信データを構築する
+func processCommand(cmd *pb_gen.GrSim_Robot_Command) {
+	kickSpeedX := cmd.GetKickspeedx()
+	kickSpeedZ := cmd.GetKickspeedz()
+
+	// ダイレクトキック判定（100以上の場合）
+	if kickSpeedX >= directKickThreshold {
+		doDirectKick = true
+		kickSpeedX -= directKickThreshold
+	}
+	if kickSpeedZ >= directKickThreshold {
+		doDirectChipKick = true
+		kickSpeedZ -= directKickThreshold
+	}
+
+	velTangent := float64(cmd.GetVeltangent())
+	velNormal := float64(cmd.GetVelnormal())
+	velAngular := float64(cmd.GetVelangular())
+	spinner := cmd.GetSpinner()
+
+	// キック情報をログ出力
+	if kickSpeedX > 0 || kickSpeedZ > 0 {
+		log.Printf("ID: %d, KickX: %.2f, KickZ: %.2f, VelT: %.2f, VelN: %.2f, VelA: %.2f, Spinner: %t",
+			cmd.GetId(), cmd.GetKickspeedx(), cmd.GetKickspeedz(), velTangent, velNormal, velAngular, spinner)
+	}
+
+	// 送信データを構築
+	bytearray := SendStruct{
+		preamble: 0xFF,
+		velx:     int16(velTangent * 1000),  // m/s → mm/s
+		vely:     int16(velNormal * 1000),   // m/s → mm/s
+		velang:   int16(velAngular * 1000),  // rad/s → mrad/s
+	}
+
+	// ドリブラー設定
+	if spinner {
+		spinnerVel := cmd.GetWheel1()
+		if spinnerVel > 100 {
+			spinnerVel = 100
+		} else if spinnerVel < 0 {
+			spinnerVel = 0
+		}
+		bytearray.dribblePower = uint8(spinnerVel)
+	}
+
+	// キッカー設定
+	if kickSpeedX > 0 {
+		kickerVal = uint8(kickSpeedX * 10)
+		kickerEnable = true
+	}
+	if kickerEnable {
+		bytearray.kickPower = kickerVal
+	}
+
+	// チップキック設定
+	if kickSpeedZ > 0 {
+		chipVal = uint8(kickSpeedZ * 10)
+		chipEnable = true
+	}
+	if chipEnable {
+		bytearray.chipPower = chipVal
+	}
+
+	// informationsビットフラグを設定
+	bytearray.informations &= ^uint8(INFO_EMG_STOP) // 緊急停止OFF
+	if doDirectKick {
+		bytearray.informations |= INFO_DIRECT_KICK
+	}
+	if doDirectChipKick {
+		bytearray.informations |= INFO_DIRECT_CHIP
+	}
+	bytearray.informations |= INFO_DO_CHARGE // 充電ON
+
+	// バイナリに変換
+	sendarray = bytes.Buffer{}
+	if err := binary.Write(&sendarray, binary.LittleEndian, bytearray); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// ReceiveData はカメラからの画像データを受信する
+func ReceiveData(done <-chan struct{}, myID uint32, ip string) {
 	serverAddr := &net.UDPAddr{
 		IP:   net.ParseIP(ip),
-		Port: 31133,
+		Port: UDP_CAMERA_PORT,
 	}
+
 	serverConn, err := net.ListenUDP("udp", serverAddr)
 	CheckError(err)
 	defer serverConn.Close()
 
 	buf := make([]byte, 20240)
+
 	for {
-		n, _, _ := serverConn.ReadFromUDP(buf)
+		select {
+		case <-done:
+			return
+		default:
+			n, _, _ := serverConn.ReadFromUDP(buf)
 
-		jsonData := &ImageData{}
-		err = json.Unmarshal(buf[0:n], jsonData)
-		if err != nil {
-			log.Fatal("Error: ", err)
+			var jsonData ImageData
+			if err := json.Unmarshal(buf[0:n], &jsonData); err != nil {
+				log.Printf("JSON unmarshal error: %v", err)
+				continue
+			}
+
+			imageData = jsonData
+			imageResponse.Frame = jsonData.Frame
 		}
-
-		imageData = *jsonData
-
-		imageResponse.Frame = jsonData.Frame
 	}
 }
