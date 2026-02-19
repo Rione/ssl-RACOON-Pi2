@@ -7,8 +7,8 @@ import (
 
 // シリアル通信設定
 const (
-	BAUDRATE         int    = 230400         // ボーレート
-	SERIAL_PORT_NAME string = "/dev/serial0" // シリアルポート名（ラズパイ4用）
+	BAUDRATE         int    = 230400       // ボーレート
+	SERIAL_PORT_NAME string = "/dev/ttyS2" // Rock5A UART2（物理ピン8/10）
 )
 
 // バッテリー電圧しきい値（10倍値で格納：150 = 15.0V）
@@ -17,17 +17,62 @@ const (
 	BATTERY_CRITICAL_THRESHOLD int = 135 // 危険電圧しきい値
 )
 
-// GPIOピン番号定義
+// GPIOピン定義（Rock5A 40ピンヘッダー）
+// warthog618/go-gpiocdev 用: gpiochip 名と line offset を指定
+//
+// ピン対応表:
+//
+//	物理ピン  RPi BCM   Rock5A GPIO   Rock5A名       gpiochip  offset
+//	Pin 12    GPIO18    129           GPIO4_A1 (LED1)  gpiochip4  1
+//	Pin 13    GPIO27    138           GPIO4_B2 (LED2)  gpiochip4  10
+//	Pin 11    GPIO13    --            GPIO4_B3 (ブザー: PWM)
+//	Pin 15    GPIO22    140           GPIO4_B4 (ボタン1) gpiochip4 12
+//	Pin 18    GPIO24    40            GPIO1_B0 (ボタン2) gpiochip1 8
+//	Pin 7     GPIO4     43            GPIO1_B3 (DIP1)   gpiochip1 11
+//	Pin 29    GPIO5     42            GPIO1_B2 (DIP2)   gpiochip1 10
+//	Pin 31    GPIO6     41            GPIO1_B1 (DIP3)   gpiochip1 9
+//	Pin 22    GPIO25    45            GPIO1_B5 (DIP4)   gpiochip1 13
+//
+// rock5a-gpio-go 用: bank (0-4), port (A=0, B=1, C=2, D=3), pin (0-7)
+// OpenGPIO(bank, port, pin) / SetPull(bank, 'A'+port, pin, mode) で使用
 const (
-	PIN_LED1    = 18 // LED1
-	PIN_LED2    = 27 // LED2
-	PIN_BUZZER  = 13 // ブザー（PWM）
-	PIN_BUTTON1 = 22 // ボタン1（S2）
-	PIN_BUTTON2 = 24 // ボタン2（S3）
-	PIN_DIP1    = 4  // DIPスイッチ1
-	PIN_DIP2    = 5  // DIPスイッチ2
-	PIN_DIP3    = 6  // DIPスイッチ3
-	PIN_DIP4    = 25 // DIPスイッチ4
+	// LED（出力）
+	PIN_LED1_BANK = 4
+	PIN_LED1_PORT = 0 // A
+	PIN_LED1_PIN  = 1
+	PIN_LED2_BANK = 4
+	PIN_LED2_PORT = 1 // B
+	PIN_LED2_PIN  = 2
+
+	// ボタン（入力・プルアップなし・アクティブロー。押下時GNDで論理1）
+	PIN_BUTTON1_BANK = 4
+	PIN_BUTTON1_PORT = 1
+	PIN_BUTTON1_PIN  = 4
+	PIN_BUTTON2_BANK = 1
+	PIN_BUTTON2_PORT = 1
+	PIN_BUTTON2_PIN  = 0
+
+	// DIPスイッチ（入力・プルアップなし・アクティブロー。ONでGND→論理1）
+	PIN_DIP1_BANK = 1
+	PIN_DIP1_PORT = 1
+	PIN_DIP1_PIN  = 3
+	PIN_DIP2_BANK = 1
+	PIN_DIP2_PORT = 1
+	PIN_DIP2_PIN  = 2
+	PIN_DIP3_BANK = 1
+	PIN_DIP3_PORT = 1
+	PIN_DIP3_PIN  = 1
+	PIN_DIP4_BANK = 1
+	PIN_DIP4_PORT = 1
+	PIN_DIP4_PIN  = 5
+)
+
+// PWM設定（/sys/class/pwm 経由でブザー制御）
+// Rock5A Pin11 = GPIO4_B3 = PWM15_IR_M1
+// デバイスツリーオーバーレイ rk3588-pwm15-m1 の有効化が必要
+const (
+	PWM_CHIP_PATH = "/sys/class/pwm/pwmchip1" // pwmchipのsysfsパス
+	PWM_CHANNEL   = 0                         // PWMチャンネル番号
 )
 
 // ネットワーク設定

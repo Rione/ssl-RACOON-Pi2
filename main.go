@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"time"
-
-	"github.com/stianeikeland/go-rpio/v4"
 )
 
 // kickCheck はキッカーパワーが入力された時に、一定時間後に値をリセットする関数である
@@ -50,6 +48,9 @@ func kickCheck(done <-chan struct{}) {
 func main() {
 	parseFlags()
 
+	// ブザーPWM初期化
+	initBuzzerPWM()
+
 	if checkInitialButtonState() {
 		log.Println("Button1 is pressed. Start Robot Control Mode")
 		isControlByRobotMode = true
@@ -59,7 +60,7 @@ func main() {
 	fmt.Println(hostname)
 
 	// 初期ホスト名の場合、新しいホスト名を設定して再起動
-	if hostname == "raspberrypi\n" {
+	if hostname == "DietPi\n" {
 		setupNewHostname()
 		return
 	}
@@ -78,12 +79,6 @@ func main() {
 
 	// 自動アップデート
 	go confirmAndSelfUpdate()
-
-	// GPIOの初期化
-	if err := rpio.Open(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 
 	// DIPスイッチからロボットIDを読み取り
 	robotID := readRobotIDFromDIP()
@@ -130,16 +125,12 @@ func parseFlags() {
 
 // checkInitialButtonState は起動時のボタン状態を確認する
 func checkInitialButtonState() bool {
-	if err := rpio.Open(); err != nil {
-		log.Fatal("Error: ", err)
+	button1, err := openInputGPIO(PIN_BUTTON1_BANK, PIN_BUTTON1_PORT, PIN_BUTTON1_PIN)
+	if err != nil {
+		log.Fatalf("Button1 pin request failed: %v", err)
 	}
-	defer rpio.Close()
-
-	button1 := rpio.Pin(PIN_BUTTON1)
-	button1.Input()
-	button1.PullUp()
-
-	return button1.Read()^1 == rpio.High
+	defer button1.Close()
+	return isPressed(button1)
 }
 
 // getHostname は現在のホスト名を取得する
@@ -161,63 +152,45 @@ func setupNewHostname() {
 	log.Printf("Unixtime is %d", time.Now().UnixNano())
 	log.Println("Change Hostname To " + hostname)
 
-	// ホスト名を変更
-	exec.Command("hostnamectl", "set-hostname", hostname).Run()
-	exec.Command("sudo", "sed", "-i", "/etc/hosts", "-e", "s/raspberrypi/"+hostname+"/g", "/etc/hosts").Run()
+	// ホスト名を変更（D-Bus 不要: /etc/hostname 書き込み + hostname コマンド）
+	exec.Command("sudo", "sh", "-c", fmt.Sprintf("echo '%s' > /etc/hostname", hostname)).Run()
+	exec.Command("sudo", "hostname", hostname).Run()
+	exec.Command("sudo", "sed", "-i", "s/DietPi/"+hostname+"/g", "/etc/hosts").Run()
 
 	log.Println("=====Reboot=====")
 
 	// 再起動音を鳴らす
-	if err := rpio.Open(); err == nil {
-		playRebootMelody()
-		rpio.Close()
-	}
+	playRebootMelody()
 
 	exec.Command("reboot").Run()
 }
 
 // playRebootMelody は再起動時のメロディを再生する
 func playRebootMelody() {
-	buzzer := rpio.Pin(PIN_BUZZER)
-	buzzer.Mode(rpio.Pwm)
-
 	notes := []int{1175, 1396, 1760}
 	for _, freq := range notes {
-		buzzer.Freq(freq * 64)
-		buzzer.DutyCycle(16, 32)
-		time.Sleep(500 * time.Millisecond)
-		buzzer.DutyCycle(0, 32)
+		ringBuzzerDirect(freq, 500*time.Millisecond)
 	}
 }
 
 // handleLocalUserMode はローカルユーザーモードの初期化を行う
 // ボタンが押されていればtrue、そうでなければfalseを返す
 func handleLocalUserMode() bool {
-	if err := rpio.Open(); err != nil {
-		CheckError(err)
+	ringBuzzerDirect(1175, 1000*time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
+
+	button1, err := openInputGPIO(PIN_BUTTON1_BANK, PIN_BUTTON1_PORT, PIN_BUTTON1_PIN)
+	if err != nil {
+		log.Fatalf("Button1 pin request failed: %v", err)
 	}
+	defer button1.Close()
 
-	buzzer := rpio.Pin(PIN_BUZZER)
-	buzzer.Mode(rpio.Pwm)
-	buzzer.Freq(1175 * 64)
-	buzzer.DutyCycle(16, 32)
-	time.Sleep(1000 * time.Millisecond)
-	buzzer.DutyCycle(0, 32)
-	time.Sleep(1000 * time.Millisecond)
-
-	button1 := rpio.Pin(PIN_BUTTON1)
-	button1.Input()
-	button1.PullUp()
-
-	if button1.Read()^1 == rpio.High {
+	if isPressed(button1) {
 		isControlByRobotMode = true
 		log.Println("Robot Control Mode is ON")
 		// 確認音を2回鳴らす
 		for i := 0; i < 2; i++ {
-			buzzer.Freq(1244 * 64)
-			buzzer.DutyCycle(16, 32)
-			time.Sleep(100 * time.Millisecond)
-			buzzer.DutyCycle(0, 32)
+			ringBuzzerDirect(1244, 100*time.Millisecond)
 			time.Sleep(100 * time.Millisecond)
 		}
 		return true
@@ -227,25 +200,33 @@ func handleLocalUserMode() bool {
 
 // readRobotIDFromDIP はDIPスイッチからロボットIDを読み取る
 func readRobotIDFromDIP() int {
-	dip1 := rpio.Pin(PIN_DIP1)
-	dip1.Input()
-	dip1.PullUp()
-	dip2 := rpio.Pin(PIN_DIP2)
-	dip2.Input()
-	dip2.PullUp()
-	dip3 := rpio.Pin(PIN_DIP3)
-	dip3.Input()
-	dip3.PullUp()
-	dip4 := rpio.Pin(PIN_DIP4)
-	dip4.Input()
-	dip4.PullUp()
+	dip1, err := openInputGPIO(PIN_DIP1_BANK, PIN_DIP1_PORT, PIN_DIP1_PIN)
+	if err != nil {
+		log.Fatalf("DIP1 pin request failed: %v", err)
+	}
+	defer dip1.Close()
+	dip2, err := openInputGPIO(PIN_DIP2_BANK, PIN_DIP2_PORT, PIN_DIP2_PIN)
+	if err != nil {
+		log.Fatalf("DIP2 pin request failed: %v", err)
+	}
+	defer dip2.Close()
+	dip3, err := openInputGPIO(PIN_DIP3_BANK, PIN_DIP3_PORT, PIN_DIP3_PIN)
+	if err != nil {
+		log.Fatalf("DIP3 pin request failed: %v", err)
+	}
+	defer dip3.Close()
+	dip4, err := openInputGPIO(PIN_DIP4_BANK, PIN_DIP4_PORT, PIN_DIP4_PIN)
+	if err != nil {
+		log.Fatalf("DIP4 pin request failed: %v", err)
+	}
+	defer dip4.Close()
 
-	fmt.Println("DIP1:", dip1.Read()^1)
-	fmt.Println("DIP2:", dip2.Read()^1)
-	fmt.Println("DIP3:", dip3.Read()^1)
-	fmt.Println("DIP4:", dip4.Read()^1)
+	fmt.Println("DIP1:", readInverted(dip1))
+	fmt.Println("DIP2:", readInverted(dip2))
+	fmt.Println("DIP3:", readInverted(dip3))
+	fmt.Println("DIP4:", readInverted(dip4))
 
-	return int(dip1.Read() ^ 1 + (dip2.Read()^1)*2 + (dip3.Read()^1)*4 + (dip4.Read()^1)*8)
+	return int(readInverted(dip1) + readInverted(dip2)*2 + readInverted(dip3)*4 + readInverted(dip4)*8)
 }
 
 // getLocalIP はローカルIPアドレスを取得する
@@ -267,7 +248,9 @@ func setupSignalHandler() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
-			rpio.Close()
+			if buzzerPWM != nil {
+				buzzerPWM.close()
+			}
 			log.Println("Bye")
 			os.Exit(0)
 		}
@@ -277,6 +260,7 @@ func setupSignalHandler() {
 // CheckError はエラーがあれば致命的エラーとしてログ出力して終了する
 func CheckError(err error) {
 	if err != nil {
+		log.Println("oops")
 		log.Fatal("Error: ", err)
 	}
 }

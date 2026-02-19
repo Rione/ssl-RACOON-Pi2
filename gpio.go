@@ -3,10 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
-	"math"
 	"time"
 
-	"github.com/stianeikeland/go-rpio/v4"
+	"github.com/Yuzz1e/rock5a-gpio-go"
 )
 
 // LED点滅速度
@@ -15,25 +14,101 @@ const (
 	LED_BLINK_FAST   = 75 * time.Millisecond  // 高速点滅間隔
 )
 
+// openOutputGPIO は出力ピンを開き、初期値を設定する（rock5a-gpio-go）
+func openOutputGPIO(bank, port, pin int, initialHigh bool) (*gpio.GPIO, error) {
+	g, err := gpio.OpenGPIO(bank, port, pin)
+	if err != nil {
+		return nil, err
+	}
+	if err := g.SetDirection("out"); err != nil {
+		g.Close()
+		return nil, err
+	}
+	val := "0"
+	if initialHigh {
+		val = "1"
+	}
+	if err := g.Write(val); err != nil {
+		g.Close()
+		return nil, err
+	}
+	return g, nil
+}
+
+// openInputGPIO は入力ピンを開く（プルアップなし・アクティブロー想定）
+// 必要なら呼び出し前に gpio.SetPull(bank, rune('A'+port), pin, gpio.Floating) で明示可能
+func openInputGPIO(bank, port, pin int) (*gpio.GPIO, error) {
+	g, err := gpio.OpenGPIO(bank, port, pin)
+	if err != nil {
+		return nil, err
+	}
+	if err := g.SetDirection("in"); err != nil {
+		g.Close()
+		return nil, err
+	}
+	return g, nil
+}
+
+// readInverted はアクティブローのピンを読み取り、押下時に1を返す（物理Low＝論理1）
+func readInverted(g *gpio.GPIO) uint8 {
+	v, err := g.Read()
+	if err != nil {
+		log.Printf("GPIO read error: %v", err)
+		return 0
+	}
+	if v == "0" {
+		return 1
+	}
+	return 0
+}
+
+// isPressed はアクティブローのボタンが押されているかを返す（Read()=="0" で押下）
+func isPressed(g *gpio.GPIO) bool {
+	v, err := g.Read()
+	if err != nil {
+		return false
+	}
+	return v == "0"
+}
+
+// setOutput は出力ピンの値を設定する（LED用: 1=点灯, 0=消灯）
+func setOutput(g *gpio.GPIO, high bool) {
+	if high {
+		_ = g.Write("1")
+	} else {
+		_ = g.Write("0")
+	}
+}
+
 // RunGPIO はGPIOの制御を行うメインループである
 func RunGPIO(done <-chan struct{}) {
-	if err := rpio.Open(); err != nil {
-		CheckError(err)
+	led, err := openOutputGPIO(PIN_LED1_BANK, PIN_LED1_PORT, PIN_LED1_PIN, false)
+	if err != nil {
+		log.Printf("GPIO LED1 request failed (%d,%d,%d): %v", PIN_LED1_BANK, PIN_LED1_PORT, PIN_LED1_PIN, err)
+		return
 	}
+	defer led.Close()
 
-	// LED初期化
-	led := rpio.Pin(PIN_LED1)
-	led.Output()
-	led2 := rpio.Pin(PIN_LED2)
-	led2.Output()
+	led2, err := openOutputGPIO(PIN_LED2_BANK, PIN_LED2_PORT, PIN_LED2_PIN, false)
+	if err != nil {
+		log.Printf("GPIO LED2 request failed (%d,%d,%d): %v", PIN_LED2_BANK, PIN_LED2_PORT, PIN_LED2_PIN, err)
+		return
+	}
+	defer led2.Close()
 
-	// ボタン初期化
-	button1 := rpio.Pin(PIN_BUTTON1)
-	button1.Input()
-	button1.PullUp()
-	button2 := rpio.Pin(PIN_BUTTON2)
-	button2.Input()
-	button2.PullUp()
+	button1, err := openInputGPIO(PIN_BUTTON1_BANK, PIN_BUTTON1_PORT, PIN_BUTTON1_PIN)
+	if err != nil {
+		log.Printf("GPIO Button1 request failed: %v", err)
+		return
+	}
+	defer button1.Close()
+
+	button2, err := openInputGPIO(PIN_BUTTON2_BANK, PIN_BUTTON2_PORT, PIN_BUTTON2_PIN)
+	if err != nil {
+		log.Printf("GPIO Button2 request failed: %v", err)
+		return
+	}
+	defer button2.Close()
 
 	// 起動メロディを再生
 	playStartupMelody()
@@ -99,30 +174,42 @@ func playStartupMelody() {
 
 // printDIPStatus はDIPスイッチの状態を出力する
 func printDIPStatus() {
-	dip1 := rpio.Pin(PIN_DIP1)
-	dip1.Input()
-	dip1.PullUp()
-	dip2 := rpio.Pin(PIN_DIP2)
-	dip2.Input()
-	dip2.PullUp()
-	dip3 := rpio.Pin(PIN_DIP3)
-	dip3.Input()
-	dip3.PullUp()
-	dip4 := rpio.Pin(PIN_DIP4)
-	dip4.Input()
-	dip4.PullUp()
+	dip1, err := openInputGPIO(PIN_DIP1_BANK, PIN_DIP1_PORT, PIN_DIP1_PIN)
+	if err != nil {
+		log.Printf("GPIO DIP1 request failed: %v", err)
+		return
+	}
+	defer dip1.Close()
+	dip2, err := openInputGPIO(PIN_DIP2_BANK, PIN_DIP2_PORT, PIN_DIP2_PIN)
+	if err != nil {
+		log.Printf("GPIO DIP2 request failed: %v", err)
+		return
+	}
+	defer dip2.Close()
+	dip3, err := openInputGPIO(PIN_DIP3_BANK, PIN_DIP3_PORT, PIN_DIP3_PIN)
+	if err != nil {
+		log.Printf("GPIO DIP3 request failed: %v", err)
+		return
+	}
+	defer dip3.Close()
+	dip4, err := openInputGPIO(PIN_DIP4_BANK, PIN_DIP4_PORT, PIN_DIP4_PIN)
+	if err != nil {
+		log.Printf("GPIO DIP4 request failed: %v", err)
+		return
+	}
+	defer dip4.Close()
 
-	fmt.Println("DIP1:", dip1.Read()^1)
-	fmt.Println("DIP2:", dip2.Read()^1)
-	fmt.Println("DIP3:", dip3.Read()^1)
-	fmt.Println("DIP4:", dip4.Read()^1)
+	fmt.Println("DIP1:", readInverted(dip1))
+	fmt.Println("DIP2:", readInverted(dip2))
+	fmt.Println("DIP3:", readInverted(dip3))
+	fmt.Println("DIP4:", readInverted(dip4))
 
-	hex := dip1.Read() ^ 1 + (dip2.Read()^1)*2 + (dip3.Read()^1)*4 + (dip4.Read()^1)*8
+	hex := readInverted(dip1) + readInverted(dip2)*2 + readInverted(dip3)*4 + readInverted(dip4)*8
 	fmt.Println("HEX:", int(hex))
 }
 
 // handleBatteryAlarm はバッテリー低下アラームを処理する
-func handleBatteryAlarm(led2, button1 rpio.Pin, alarmVoltage *int) {
+func handleBatteryAlarm(led2, button1 *gpio.GPIO, alarmVoltage *int) {
 	log.Println("BATTERY ALARM")
 
 	for {
@@ -133,15 +220,15 @@ func handleBatteryAlarm(led2, button1 rpio.Pin, alarmVoltage *int) {
 		}
 
 		// 警告アラーム
-		led2.High()
+		setOutput(led2, true)
 		go ringBuzzer(25, 50*time.Millisecond, 0)
 		time.Sleep(60 * time.Millisecond)
 		go ringBuzzer(20, 90*time.Millisecond, 0)
-		led2.Low()
+		setOutput(led2, false)
 		time.Sleep(120 * time.Millisecond)
 
 		// ボタンでアラーム解除
-		if button1.Read()^1 == rpio.High || alarmIgnore {
+		if isPressed(button1) || alarmIgnore {
 			log.Println("BATTERY ALARM IGNORED")
 			*alarmVoltage = BATTERY_CRITICAL_THRESHOLD
 			playAlarmDismissSound()
@@ -160,12 +247,12 @@ func playAlarmDismissSound() {
 }
 
 // handleNormalOperation は通常のLED点滅とボタン処理を行う
-func handleNormalOperation(led, button1, button2 rpio.Pin, ledInterval time.Duration) time.Duration {
+func handleNormalOperation(led, button1, button2 *gpio.GPIO, ledInterval time.Duration) time.Duration {
 	time.Sleep(ledInterval)
-	led.Write(rpio.High)
+	setOutput(led, true)
 
 	// ボタン1が押されたら高速点滅
-	if button1.Read()^1 == rpio.High {
+	if isPressed(button1) {
 		ledInterval = LED_BLINK_FAST
 		go ringBuzzer(20, 20*time.Millisecond, 0)
 	} else {
@@ -173,38 +260,12 @@ func handleNormalOperation(led, button1, button2 rpio.Pin, ledInterval time.Dura
 	}
 
 	// ボタン2が押されたら音を鳴らす
-	if button2.Read()^1 == rpio.High {
+	if isPressed(button2) {
 		go ringBuzzer(10, 50*time.Millisecond, 0)
 	}
 
 	time.Sleep(ledInterval)
-	led.Write(rpio.Low)
+	setOutput(led, false)
 
 	return ledInterval
-}
-
-// ringBuzzer は指定されたトーンと長さでブザーを鳴らす
-// buzzerTone: 音階（0から始まる半音単位、0=A#, 440Hzベース）
-// buzzerTime: 再生時間
-// freq: 直接周波数指定（0の場合はbuzzerToneから計算）
-func ringBuzzer(buzzerTone int, buzzerTime time.Duration, freq int) {
-	buzzer := rpio.Pin(PIN_BUZZER)
-	buzzer.Mode(rpio.Pwm)
-
-	// 周波数の計算（PWMは64倍の値を使用）
-	const pwmMultiplier = 64
-	const baseFrequency = 440.0
-	const semitoneRatio = 1.0595 // 12平均律の半音比
-
-	var frequency int
-	if freq == 0 {
-		frequency = int(baseFrequency*math.Pow(semitoneRatio, float64(buzzerTone))) * pwmMultiplier
-	} else {
-		frequency = freq * pwmMultiplier
-	}
-
-	buzzer.Freq(frequency)
-	buzzer.DutyCycle(16, 32)
-	time.Sleep(buzzerTime)
-	buzzer.DutyCycle(0, 32)
 }
