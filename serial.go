@@ -153,7 +153,7 @@ func prepareSendData() []byte {
 	sendbytes := sendarray.Bytes()
 
 	// 初回（データがない場合）は初期値を設定
-	if len(sendbytes) <= 0 {
+	if len(sendbytes) < 19 {
 		sendbytes = make([]byte, 19)
 		sendbytes[0] = 0xFF // プリアンブル
 		sendbytes[idxInfo] = 1
@@ -190,6 +190,12 @@ func prepareSendData() []byte {
 
 // updateCameraCoordinates はカメラ座標を更新する（一時的なゼロは無視）
 func updateCameraCoordinates(sendbytes []byte) {
+	//imageDataがnilの場合は安全に処理をスキップ（または0をセット）する。
+	if imageData == nil {
+		sendbytes[idxCamBallX] = 0
+		sendbytes[idxCamBallY] = 0
+		return
+	}
 	// X座標
 	if imageData.ImageX == 0 {
 		zeroCountX++
