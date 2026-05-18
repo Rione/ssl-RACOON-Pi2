@@ -140,7 +140,8 @@ type ImageData struct {
 	Frame      string  `json:"frame"`
 }
 
-var imageData ImageData
+var imageData *ImageData
+var prevBallDetected bool = false //検知回数をカウントして警告音を制御するための変数
 
 // ImageResponse はAPIレスポンス用の画像データ構造体である
 type ImageResponse struct {

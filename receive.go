@@ -107,9 +107,9 @@ func processCommand(cmd *pb_gen.GrSim_Robot_Command) {
 	// 送信データを構築
 	bytearray := SendStruct{
 		preamble: 0xFF,
-		velx:     int16(velTangent * 1000),  // m/s → mm/s
-		vely:     int16(velNormal * 1000),   // m/s → mm/s
-		velang:   int16(velAngular * 1000),  // rad/s → mrad/s
+		velx:     int16(velTangent * 1000), // m/s → mm/s
+		vely:     int16(velNormal * 1000),  // m/s → mm/s
+		velang:   int16(velAngular * 1000), // rad/s → mrad/s
 	}
 
 	// ドリブラー設定
@@ -178,14 +178,19 @@ func ReceiveData(done <-chan struct{}, myID uint32, ip string) {
 		default:
 			n, _, _ := serverConn.ReadFromUDP(buf)
 
-			var jsonData ImageData
-			if err := json.Unmarshal(buf[0:n], &jsonData); err != nil {
+			jsonData := &ImageData{}
+			if err := json.Unmarshal(buf[0:n], jsonData); err != nil {
 				log.Printf("JSON unmarshal error: %v", err)
 				continue
 			}
 
 			imageData = jsonData
 			imageResponse.Frame = jsonData.Frame
+
+			if jsonData.IsBallExit && !prevBallDetected { //ボールが2回以上検出したら条件から外す
+				go playBallDetectedSound()
+			}
+			prevBallDetected = jsonData.IsBallExit //preBallDetectedによって、ボールが検出されたときに一度だけ音を鳴らすようにする
 		}
 	}
 }
