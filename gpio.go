@@ -160,7 +160,7 @@ func playAlarmDismissSound() {
 }
 
 func playBallDetectedSound() {
-	for i := 0; i < 4; i++ {
+	for imageData != nil && imageData.IsBallExit {
 		ringBuzzer(10, 50*time.Millisecond, 0)
 		time.Sleep(80 * time.Millisecond)
 	}

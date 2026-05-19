@@ -187,10 +187,11 @@ func ReceiveData(done <-chan struct{}, myID uint32, ip string) {
 			imageData = jsonData
 			imageResponse.Frame = jsonData.Frame
 
-			if jsonData.IsBallExit && !prevBallDetected { //ボールが2回以上検出したら条件から外す
+			// ボールを新しく検出した（前回は検出していなかった）場合のみ、音再生ループを開始
+			if jsonData.IsBallExit && !prevBallDetected {
 				go playBallDetectedSound()
 			}
-			prevBallDetected = jsonData.IsBallExit //preBallDetectedによって、ボールが検出されたときに一度だけ音を鳴らすようにする
+			prevBallDetected = jsonData.IsBallExit //時間放置による音の重なり阻止よりもタイミングが正確
 		}
 	}
 }
