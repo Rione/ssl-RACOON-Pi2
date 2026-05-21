@@ -107,9 +107,9 @@ func processCommand(cmd *pb_gen.GrSim_Robot_Command) {
 	// 送信データを構築
 	bytearray := SendStruct{
 		preamble: 0xFF,
-		velx:     int16(velTangent * 1000),  // m/s → mm/s
-		vely:     int16(velNormal * 1000),   // m/s → mm/s
-		velang:   int16(velAngular * 1000),  // rad/s → mrad/s
+		velx:     int16(velTangent * 1000), // m/s → mm/s
+		vely:     int16(velNormal * 1000),  // m/s → mm/s
+		velang:   int16(velAngular * 1000), // rad/s → mrad/s
 	}
 
 	// ドリブラー設定
@@ -178,14 +178,20 @@ func ReceiveData(done <-chan struct{}, myID uint32, ip string) {
 		default:
 			n, _, _ := serverConn.ReadFromUDP(buf)
 
-			var jsonData ImageData
-			if err := json.Unmarshal(buf[0:n], &jsonData); err != nil {
+			jsonData := &ImageData{}
+			if err := json.Unmarshal(buf[0:n], jsonData); err != nil {
 				log.Printf("JSON unmarshal error: %v", err)
 				continue
 			}
 
 			imageData = jsonData
 			imageResponse.Frame = jsonData.Frame
+
+			// ボールを新しく検出した（前回は検出していなかった）場合のみ、音再生ループを開始
+			if jsonData.IsBallExit && !prevBallDetected {
+				go playBallDetectedSound()
+			}
+			prevBallDetected = jsonData.IsBallExit //時間放置による音の重なり阻止よりもタイミングが正確
 		}
 	}
 }

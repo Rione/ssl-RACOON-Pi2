@@ -159,6 +159,13 @@ func playAlarmDismissSound() {
 	}
 }
 
+func playBallDetectedSound() {
+	for imageData != nil && imageData.IsBallExit {
+		ringBuzzer(10, 50*time.Millisecond, 0)
+		time.Sleep(80 * time.Millisecond)
+	}
+}
+
 // handleNormalOperation は通常のLED点滅とボタン処理を行う
 func handleNormalOperation(led, button1, button2 rpio.Pin, ledInterval time.Duration) time.Duration {
 	time.Sleep(ledInterval)
