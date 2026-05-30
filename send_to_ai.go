@@ -20,7 +20,8 @@ const (
 // createStatus はRACOON-MWに送信するステータスメッセージを作成する
 func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbler bool,
 	batteryVoltage, capPower uint32, isBallExit bool, imageX, imageY float32,
-	minThreshold, maxThreshold string, ballDetectRadius int32, circularityThreshold float32) *pb_gen.PiToMw {
+	minThreshold, maxThreshold string, ballDetectRadius int32, circularityThreshold float32,
+	flWheelSpeed, blWheelSpeed, brWheelSpeed, frWheelSpeed float32) *pb_gen.PiToMw {
 	return &pb_gen.PiToMw{
 		RobotsStatus: &pb_gen.Robot_Status{
 			RobotId:                &robotID,
@@ -29,6 +30,10 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 			IsNewDribbler:          &isNewDribbler,
 			BatteryVoltage:         &batteryVoltage,
 			CapPower:               &capPower,
+			FlWheelSpeed:           &flWheelSpeed,
+			BlWheelSpeed:           &blWheelSpeed,
+			BrWheelSpeed:           &brWheelSpeed,
+			FrWheelSpeed:           &frWheelSpeed,
 		},
 		BallStatus: &pb_gen.Ball_Status{
 			IsBallExit:  &isBallExit,
@@ -126,6 +131,10 @@ func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
 		adjustment.MaxThreshold,
 		int32(adjustment.BallDetectRadius),
 		adjustment.CircularityThreshold,
+		flWheelSpeedRadS,
+		blWheelSpeedRadS,
+		brWheelSpeedRadS,
+		frWheelSpeedRadS,
 	)
 
 	data, err := proto.Marshal(status)

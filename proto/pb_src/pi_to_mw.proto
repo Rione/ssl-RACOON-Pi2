@@ -15,6 +15,10 @@ message Robot_Status {
   required bool is_new_dribbler = 4;
   required uint32 battery_voltage  = 5;
   required uint32 cap_power  = 6;
+  optional float fl_wheel_speed = 7;
+  optional float bl_wheel_speed = 8;
+  optional float br_wheel_speed = 9;
+  optional float fr_wheel_speed = 10;
 }
 
 message Ball_Status {
