@@ -27,8 +27,8 @@ var (
 // ゼロ値の許容回数
 const zeroTolerance = 5
 
-// シリアル通信のプリアンブルパターン
-var serialPreamble = []byte{0xFF, 0x00, 0xFF, 0x00}
+// シリアル通信のプリアンブル（0xFF 1バイトのみ）
+var serialPreamble = []byte{0xFF}
 
 // 送信データのインデックス定数
 const (
@@ -89,9 +89,17 @@ func processSerialCommunication(port serial.Port) {
 		CheckError(err)
 	}
 
+	// ホイール回転数を100分の1に変換して rad/s の値にする
+	flWheelSpeedRadS = float32(recvdata.FlWheelSpeed) / 100.0
+	blWheelSpeedRadS = float32(recvdata.BlWheelSpeed) / 100.0
+	brWheelSpeedRadS = float32(recvdata.BrWheelSpeed) / 100.0
+	frWheelSpeedRadS = float32(recvdata.FrWheelSpeed) / 100.0
+
 	if debugSerial {
 		log.Printf("[Serial RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
 			recvdata.Volt, float32(recvdata.Volt)*0.1, recvdata.SensorInformation, recvdata.CapPower)
+		log.Printf("[Serial RX] Wheel(rad/s) FL: %.2f, BL: %.2f, BR: %.2f, FR: %.2f",
+			flWheelSpeedRadS, blWheelSpeedRadS, brWheelSpeedRadS, frWheelSpeedRadS)
 	}
 
 	// バッテリーエラーチェック
@@ -111,11 +119,11 @@ func processSerialCommunication(port serial.Port) {
 // waitForPreambleAndReceive はプリアンブルを検出してデータを受信する
 func waitForPreambleAndReceive(port serial.Port) []byte {
 	buf := make([]byte, 1)
-	recvbuf := make([]byte, 3)
+	recvbuf := make([]byte, 12)
 
 	port.ResetInputBuffer()
 
-	// プリアンブル検出（0xFF, 0x00, 0xFF, 0x00）
+	// プリアンブル検出（0xFF 1バイトのみ）
 	preambleIdx := 0
 	for preambleIdx < len(serialPreamble) {
 		port.Read(buf)
@@ -126,8 +134,8 @@ func waitForPreambleAndReceive(port serial.Port) []byte {
 		}
 	}
 
-	// データ受信（3バイト）
-	for i := 0; i < 3; i++ {
+	// データ受信（12バイト: Volt(1) + Sensor(1) + Cap(1) + FL(2) + BL(2) + BR(2) + FR(2) + Footer(1)）
+	for i := 0; i < 12; i++ {
 		port.Read(buf)
 		recvbuf[i] = buf[0]
 	}

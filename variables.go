@@ -58,7 +58,20 @@ type RecvStruct struct {
 	Volt              uint8
 	SensorInformation uint8
 	CapPower          uint8
+	FlWheelSpeed      int16
+	BlWheelSpeed      int16
+	BrWheelSpeed      int16
+	FrWheelSpeed      int16
+	Footer            uint8
 }
+
+// ホイール回転数（rad/s）変換後の値
+var (
+	flWheelSpeedRadS float32
+	blWheelSpeedRadS float32
+	brWheelSpeedRadS float32
+	frWheelSpeedRadS float32
+)
 
 // センサー情報のビットマスク
 const (
