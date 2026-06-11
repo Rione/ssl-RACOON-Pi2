@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"log"
 	"time"
@@ -26,6 +24,9 @@ var (
 
 // ゼロ値の許容回数
 const zeroTolerance = 5
+
+// recvPacketSize は 0xFF プリアンブル直後に読むバイト数（フッタ 0xAA を含む）
+const recvPacketSize = 12
 
 // シリアル通信のプリアンブル（0xFF 1バイトのみ）
 var serialPreamble = []byte{0xFF}
@@ -84,10 +85,7 @@ func processSerialCommunication(port serial.Port) {
 	// プリアンブルを待って受信
 	recvbuf := waitForPreambleAndReceive(port)
 
-	// バイナリから構造体に変換
-	if err := binary.Read(bytes.NewReader(recvbuf), binary.BigEndian, &recvdata); err != nil {
-		CheckError(err)
-	}
+	recvdata = parseRecvBuf(recvbuf)
 
 	// ホイール回転数を100分の1に変換して rad/s の値にする
 	flWheelSpeedRadS = float32(recvdata.FlWheelSpeed) / 100.0
@@ -116,10 +114,24 @@ func processSerialCommunication(port serial.Port) {
 	prevIsSignalReceived = isSignalReceived
 }
 
+// parseRecvBuf は STM 送信形式（パディングなし・リトルエンディアン）を手動でパースする
+func parseRecvBuf(recvbuf []byte) RecvStruct {
+	return RecvStruct{
+		Volt:              recvbuf[0],
+		SensorInformation: recvbuf[1],
+		CapPower:          recvbuf[2],
+		FlWheelSpeed:      int16(recvbuf[3]) | int16(recvbuf[4])<<8,
+		BlWheelSpeed:      int16(recvbuf[5]) | int16(recvbuf[6])<<8,
+		BrWheelSpeed:      int16(recvbuf[7]) | int16(recvbuf[8])<<8,
+		FrWheelSpeed:      int16(recvbuf[9]) | int16(recvbuf[10])<<8,
+		Footer:            recvbuf[11],
+	}
+}
+
 // waitForPreambleAndReceive はプリアンブルを検出してデータを受信する
 func waitForPreambleAndReceive(port serial.Port) []byte {
 	buf := make([]byte, 1)
-	recvbuf := make([]byte, 12)
+	recvbuf := make([]byte, recvPacketSize)
 
 	port.ResetInputBuffer()
 
@@ -134,8 +146,8 @@ func waitForPreambleAndReceive(port serial.Port) []byte {
 		}
 	}
 
-	// データ受信（12バイト: Volt(1) + Sensor(1) + Cap(1) + FL(2) + BL(2) + BR(2) + FR(2) + Footer(1)）
-	for i := 0; i < 12; i++ {
+	// データ受信: Volt(1) + Sensor(1) + Cap(1) + FL(2) + BL(2) + BR(2) + FR(2) + Footer(1)
+	for i := 0; i < recvPacketSize; i++ {
 		port.Read(buf)
 		recvbuf[i] = buf[0]
 	}

@@ -49,6 +49,10 @@ const (
 var sendarray bytes.Buffer // 送信用バッファ
 
 // RecvStruct はシリアル通信での受信データ構造体である
+// ワイヤ形式（0xFF の直後 12 バイト、パディングなし）:
+//   [0] Volt, [1] SensorInformation, [2] CapPower,
+//   [3:4] FlWheelSpeed, [5:6] BlWheelSpeed, [7:8] BrWheelSpeed, [9:10] FrWheelSpeed (LE),
+//   [11] Footer (0xAA)
 // SensorInformationのビット構成:
 //   - bit[0-4]: Reserved
 //   - bit[5]: IsNewDribbler
