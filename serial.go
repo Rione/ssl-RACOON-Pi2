@@ -94,8 +94,11 @@ func processSerialCommunication(port serial.Port) {
 	frWheelSpeedRadS = float32(recvdata.FrWheelSpeed) / 100.0
 
 	if debugSerial {
-		log.Printf("[Serial RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
-			recvdata.Volt, float32(recvdata.Volt)*0.1, recvdata.SensorInformation, recvdata.CapPower)
+		log.Printf("[Serial RX] Raw: % 02X", recvbuf)
+		log.Printf("[Serial RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d, Footer: 0x%02X",
+			recvdata.Volt, float32(recvdata.Volt)*0.1, recvdata.SensorInformation, recvdata.CapPower, recvdata.Footer)
+		log.Printf("[Serial RX] Wheel(raw) FL: %d, BL: %d, BR: %d, FR: %d",
+			recvdata.FlWheelSpeed, recvdata.BlWheelSpeed, recvdata.BrWheelSpeed, recvdata.FrWheelSpeed)
 		log.Printf("[Serial RX] Wheel(rad/s) FL: %.2f, BL: %.2f, BR: %.2f, FR: %.2f",
 			flWheelSpeedRadS, blWheelSpeedRadS, brWheelSpeedRadS, frWheelSpeedRadS)
 	}
