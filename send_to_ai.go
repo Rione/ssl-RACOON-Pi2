@@ -117,6 +117,14 @@ func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
 	detectDribblerSensor := recvdata.SensorInformation&SENSOR_DRIBBLER_MASK != 0
 	isNewDribbler := recvdata.SensorInformation&SENSOR_NEW_DRIB_MASK != 0
 
+	var isBallExit bool
+	var imageX, imageY float32
+	if imageData != nil {
+		isBallExit = imageData.IsBallExit
+		imageX = imageData.ImageX
+		imageY = imageData.ImageY
+	}
+
 	status := createStatus(
 		myID,
 		detectPhotoSensor,
@@ -124,9 +132,9 @@ func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
 		isNewDribbler,
 		uint32(recvdata.Volt),
 		uint32(recvdata.CapPower),
-		imageData.IsBallExit,
-		imageData.ImageX,
-		imageData.ImageY,
+		isBallExit,
+		imageX,
+		imageY,
 		adjustment.MinThreshold,
 		adjustment.MaxThreshold,
 		int32(adjustment.BallDetectRadius),
