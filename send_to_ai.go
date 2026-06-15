@@ -68,18 +68,31 @@ func RunServer(done <-chan struct{}, myID uint32) {
 	ticker := time.NewTicker(sendInterval)
 	defer ticker.Stop()
 
+	var lastDiscoverTime time.Time
+	var lastOkTime time.Time
+
 	for {
 		select {
 		case <-done:
 			return
 		case <-ticker.C:
+			// 共有変数書き換えなのでロック
+			StateMu.Lock()
+
 			// PCから3s何も届かなかったら接続リセット
 			if ConnectionState != StateDiscovering && time.Since(lastRecvTime) > robotTimeout {
 				log.Println("[AI TX] PC connection timed out. Reverting to DISCOVERING.")
 				ConnectionState = StateDiscovering
 			}
 
-			switch ConnectionState {
+			// 今の通信状態とPCのIPをローカル変数にコピーして保持
+			currentState := ConnectionState
+			currentPcAddr := PcAddress
+
+			// コピーが終わったらすぐにロックを解除
+			StateMu.Unlock()
+
+			switch currentState {
 			case StateDiscovering:
 				// DISCOVER(0x01)送信(マルチキャスト)
 				if time.Since(lastDiscoverTime) > discoverInterval {
@@ -92,9 +105,9 @@ func RunServer(done <-chan struct{}, myID uint32) {
 
 			case StateOffered:
 				// OK_ROBOT(0x03)送信(ユニキャスト)
-				if time.Since(lastOkTime) > okInterval && PcAddress != nil {
+				if time.Since(lastOkTime) > okInterval && currentPcAddr != nil {
 					header := []byte{byte((myID << 4) | 0x03)}
-					if _, err := conn.WriteToUDP(header, PcAddress); err != nil {
+					if _, err := conn.WriteToUDP(header, currentPcAddr); err != nil {
 						log.Printf("Failed to send OK_ROBOT: %v", err)
 					}
 					lastOkTime = time.Now()
@@ -102,8 +115,8 @@ func RunServer(done <-chan struct{}, myID uint32) {
 
 			case StateConnected:
 				// DATA(0x05)を送信
-				if PcAddress != nil {
-					sendStatusToMW(conn, PcAddress, myID, adjustment)
+				if currentPcAddr != nil {
+					sendStatusToMW(conn, currentPcAddr, myID, adjustment)
 				}
 			}
 		}

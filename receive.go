@@ -51,6 +51,9 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 				continue
 			}
 
+			// 共有変数書き換えなのでロック
+			StateMu.Lock()
+
 			switch cmdId {
 			case 0x02: // OFFER
 				PcAddress = addr // PCのIPアドレスを記憶
@@ -79,9 +82,9 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 					// 先頭1バイトを削って、残りをProtobufとしてパース
 					if err := proto.Unmarshal(buf[1:n], packet); err != nil {
 						log.Printf("Error unmarshaling DATA: %v", err)
-						continue
+					} else {
+						processRobotCommands(packet, myID)
 					}
-					processRobotCommands(packet, myID)
 				}
 
 			case 0x07: // KEEP_ALIVE
@@ -94,6 +97,7 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 				
 				lastRecvTime = time.Now() // KEEP_ALIVE受信でも寿命リセット
 			}
+			StateMu.Unlock()
 		}
 	}
 }
