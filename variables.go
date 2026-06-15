@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"net"
+	"sync"
 	"time"
 )
 
@@ -44,6 +46,13 @@ const (
 	KICK_HOLD_DURATION  = 500 * time.Millisecond // キック値保持時間
 	NO_RECV_TIMEOUT     = 1 * time.Second        // 受信タイムアウト
 	CHARGE_STOP_TIMEOUT = 15 * time.Second       // 充電停止までのタイムアウト
+)
+
+// ハンドシェイク中の状態管理変数
+const (
+	StateDiscovering = 0
+	StateOffered     = 1
+	StateConnected   = 2
 )
 
 var sendarray bytes.Buffer // 送信用バッファ
@@ -124,6 +133,10 @@ const (
 
 // グローバル状態変数
 var (
+	StateMu         sync.Mutex           // 競合を防ぐための鍵（ロック）
+	ConnectionState int          = StateDiscovering
+	PcAddress       *net.UDPAddr         // 接続先PCのIPアドレスを記憶
+	
 	recvdata     RecvStruct              // 受信データ
 	lastRecvTime time.Time  = time.Now() // 最終受信時刻
 	imuError     bool       = false      // IMU速度超過フラグ

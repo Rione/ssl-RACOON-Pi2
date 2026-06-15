@@ -16,18 +16,6 @@ import (
 // ダイレクトキック判定用のしきい値
 const directKickThreshold float32 = 100
 
-// ハンドシェイク中の状態管理変数
-const (
-	StateDiscovering = 0
-	StateOffered     = 1
-	StateConnected   = 2
-)
-
-var (
-	ConnectionState int = StateDiscovering
-	PcAddress       *net.UDPAddr // 接続先PCのIPアドレスを記憶
-)
-
 // RunClient はAIからの制御コマンドを受信するUDPクライアントである
 func RunClient(done <-chan struct{}, myID uint32, ip string) {
 	serverAddr := &net.UDPAddr{
