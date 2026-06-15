@@ -14,7 +14,10 @@ import (
 
 const (
 	thresholdFile  = "threshold.json"
-	sendInterval   = 100 * time.Millisecond
+	sendInterval     = time.Second / 60
+	discoverInterval = 500 * time.Millisecond // DISCOVERは500ms間隔
+	okInterval       = 100 * time.Millisecond // OK_ROBOTは100ms間隔
+	robotTimeout     = 3 * time.Second        // PCから3s音沙汰がなければタイムアウト
 )
 
 // createStatus はRACOON-MWに送信するステータスメッセージを作成する
@@ -51,10 +54,11 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 
 // RunServer はRACOON-MWにボールセンサ等の情報を送信するサーバーである
 func RunServer(done <-chan struct{}, myID uint32) {
-	addr := MULTICAST_ADDR + ":" + MULTICAST_PORT
-	fmt.Println("Sender:", addr)
+	// DISCOVER用マルチキャストアドレス
+	mcastAddr, err := net.ResolveUDPAddr("udp", MULTICAST_ADDR+":"+MULTICAST_PORT)
+	CheckError(err)
 
-	conn, err := net.Dial("udp", addr)
+	conn, err := net.ListenUDP("udp", nil)
 	CheckError(err)
 	defer conn.Close()
 
@@ -69,7 +73,39 @@ func RunServer(done <-chan struct{}, myID uint32) {
 		case <-done:
 			return
 		case <-ticker.C:
-			sendStatusToMW(conn, myID, adjustment)
+			// PCから3s何も届かなかったら接続リセット
+			if ConnectionState != StateDiscovering && time.Since(lastRecvTime) > robotTimeout {
+				log.Println("[AI TX] PC connection timed out. Reverting to DISCOVERING.")
+				ConnectionState = StateDiscovering
+			}
+
+			switch ConnectionState {
+			case StateDiscovering:
+				// DISCOVER(0x01)送信(マルチキャスト)
+				if time.Since(lastDiscoverTime) > discoverInterval {
+					header := []byte{byte((myID << 4) | 0x01)}
+					if _, err := conn.WriteToUDP(header, mcastAddr); err != nil {
+						log.Printf("Failed to send DISCOVER: %v", err)
+					}
+					lastDiscoverTime = time.Now()
+				}
+
+			case StateOffered:
+				// OK_ROBOT(0x03)送信(ユニキャスト)
+				if time.Since(lastOkTime) > okInterval && PcAddress != nil {
+					header := []byte{byte((myID << 4) | 0x03)}
+					if _, err := conn.WriteToUDP(header, PcAddress); err != nil {
+						log.Printf("Failed to send OK_ROBOT: %v", err)
+					}
+					lastOkTime = time.Now()
+				}
+
+			case StateConnected:
+				// DATA(0x05)を送信
+				if PcAddress != nil {
+					sendStatusToMW(conn, PcAddress, myID, adjustment)
+				}
+			}
 		}
 	}
 }
@@ -111,7 +147,7 @@ func saveAdjustmentConfig(adjustment Adjustment) error {
 }
 
 // sendStatusToMW はRACOON-MWにステータス情報を送信する
-func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
+func sendStatusToMW(conn *net.UDPConn, targetAddr *net.UDPAddr, myID uint32, adjustment Adjustment) {
 	// センサー情報をビットマスクで取得
 	detectPhotoSensor := recvdata.SensorInformation&SENSOR_PHOTO_MASK != 0
 	detectDribblerSensor := recvdata.SensorInformation&SENSOR_DRIBBLER_MASK != 0
@@ -151,7 +187,11 @@ func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
 		return
 	}
 
-	if _, err := conn.Write(data); err != nil {
+	// 先頭1バイトヘッダを付加(RobotID << 4 | 0x05)
+	header := byte((myID << 4) | 0x05)
+	sendData := append([]byte{header}, data...)
+
+	if _, err := conn.WriteToUDP(sendData, targetAddr); err != nil {
 		log.Printf("UDP send error: %v", err)
 	}
 }

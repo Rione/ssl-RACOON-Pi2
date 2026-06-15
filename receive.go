@@ -16,6 +16,18 @@ import (
 // ダイレクトキック判定用のしきい値
 const directKickThreshold float32 = 100
 
+// ハンドシェイク中の状態管理変数
+const (
+	StateDiscovering = 0
+	StateOffered     = 1
+	StateConnected   = 2
+)
+
+var (
+	ConnectionState int = StateDiscovering
+	PcAddress       *net.UDPAddr // 接続先PCのIPアドレスを記憶
+)
+
 // RunClient はAIからの制御コマンドを受信するUDPクライアントである
 func RunClient(done <-chan struct{}, myID uint32, ip string) {
 	serverAddr := &net.UDPAddr{
@@ -28,21 +40,72 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 	defer serverConn.Close()
 
 	buf := make([]byte, 1024)
+	log.Printf("[AI RX] Started listening for PC on port %d...", UDP_RECV_PORT)
 
 	for {
 		select {
 		case <-done:
 			return
 		default:
-			n, _, _ := serverConn.ReadFromUDP(buf)
-			lastRecvTime = time.Now()
-
-			packet := &pb_gen.GrSim_Packet{}
-			if err := proto.Unmarshal(buf[0:n], packet); err != nil {
-				log.Fatal("Error: ", err)
+			n, addr, _ := serverConn.ReadFromUDP(buf)
+			if err != nil {
+				log.Printf("[AI RX] Error reading UDP message: %v", err)
+				continue
 			}
 
-			processRobotCommands(packet, myID)
+			// 先頭1バイトのヘッダを解析
+			header := buf[0]
+			robotId := uint32((header >> 4) & 0x0F) // 上位4bit: ロボットID
+			cmdId := header & 0x0F                  // 下位4bit: コマンドID
+
+			// 自分宛てのパケットでなければ無視
+			if robotId != myID {
+				continue
+			}
+
+			switch cmdId {
+			case 0x02: // OFFER
+				PcAddress = addr // PCのIPアドレスを記憶
+				ConnectionState = StateOffered
+				log.Printf("[AI RX] Received OFFER from %s. State -> OFFERED", addr.IP.String())
+
+			case 0x04: // OK_PC
+				if ConnectionState == StateOffered {
+					ConnectionState = StateConnected
+					lastRecvTime = time.Now()
+					log.Printf("[AI RX] Received OK_PC from %s. State -> CONNECTED", addr.IP.String())
+				}
+
+			case 0x06: // DATA (BotCmd)
+				// OK_PC取りこぼし->DATAの場合CONNECTEDに強制昇格
+				if ConnectionState != StateConnected {
+					ConnectionState = StateConnected
+					PcAddress = addr
+					log.Printf("[AI RX] Received DATA before OK_PC. Implicit upgrade to CONNECTED")
+				}
+				
+				lastRecvTime = time.Now() // DATA受信で寿命タイマーリセット
+
+				if n > 1 {
+					packet := &pb_gen.GrSim_Packet{}
+					// 先頭1バイトを削って、残りをProtobufとしてパース
+					if err := proto.Unmarshal(buf[1:n], packet); err != nil {
+						log.Printf("Error unmarshaling DATA: %v", err)
+						continue
+					}
+					processRobotCommands(packet, myID)
+				}
+
+			case 0x07: // KEEP_ALIVE
+				// KEEP_ALIVEも生存確認なので、未接続ならCONNECTEDに昇格
+				if ConnectionState != StateConnected {
+					ConnectionState = StateConnected
+					PcAddress = addr
+					log.Printf("[AI RX] Received KEEP_ALIVE before OK_PC. Implicit upgrade to CONNECTED")
+				}
+				
+				lastRecvTime = time.Now() // KEEP_ALIVE受信でも寿命リセット
+			}
 		}
 	}
 }
