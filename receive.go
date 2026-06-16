@@ -35,9 +35,12 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 		case <-done:
 			return
 		default:
-			n, addr, _ := serverConn.ReadFromUDP(buf)
+			n, addr, err := serverConn.ReadFromUDP(buf)
 			if err != nil {
 				log.Printf("[AI RX] Error reading UDP message: %v", err)
+				continue
+			}
+			if n == 0 {
 				continue
 			}
 
@@ -56,25 +59,22 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 
 			switch cmdId {
 			case 0x02: // OFFER
-				PcAddress = addr // PCのIPアドレスを記憶
+				PcAddress = pcReceiveAddr(addr) // PCのIPアドレスとRAVEN受信ポートを記憶
 				ConnectionState = StateOffered
-				log.Printf("[AI RX] Received OFFER from %s. State -> OFFERED", addr.IP.String())
+				log.Printf("[AI RX] Received OFFER from %s. State -> OFFERED", PcAddress.String())
 
 			case 0x04: // OK_PC
-				if ConnectionState == StateOffered {
+				if ConnectionState == StateOffered && isSamePcIP(addr) {
 					ConnectionState = StateConnected
 					lastRecvTime = time.Now()
 					log.Printf("[AI RX] Received OK_PC from %s. State -> CONNECTED", addr.IP.String())
 				}
 
 			case 0x06: // DATA (BotCmd)
-				// OK_PC取りこぼし->DATAの場合CONNECTEDに強制昇格
-				if ConnectionState != StateConnected {
-					ConnectionState = StateConnected
-					PcAddress = addr
-					log.Printf("[AI RX] Received DATA before OK_PC. Implicit upgrade to CONNECTED")
+				if ConnectionState != StateConnected || !isSamePcIP(addr) {
+					break
 				}
-				
+
 				lastRecvTime = time.Now() // DATA受信で寿命タイマーリセット
 
 				if n > 1 {
@@ -88,18 +88,30 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 				}
 
 			case 0x07: // KEEP_ALIVE
-				// KEEP_ALIVEも生存確認なので、未接続ならCONNECTEDに昇格
-				if ConnectionState != StateConnected {
-					ConnectionState = StateConnected
-					PcAddress = addr
-					log.Printf("[AI RX] Received KEEP_ALIVE before OK_PC. Implicit upgrade to CONNECTED")
+				if ConnectionState != StateConnected || !isSamePcIP(addr) {
+					break
 				}
-				
+
 				lastRecvTime = time.Now() // KEEP_ALIVE受信でも寿命リセット
 			}
 			StateMu.Unlock()
 		}
 	}
+}
+
+func pcReceiveAddr(addr *net.UDPAddr) *net.UDPAddr {
+	if addr == nil {
+		return nil
+	}
+	return &net.UDPAddr{
+		IP:   append(net.IP(nil), addr.IP...),
+		Port: PC_RECV_PORT,
+		Zone: addr.Zone,
+	}
+}
+
+func isSamePcIP(addr *net.UDPAddr) bool {
+	return PcAddress != nil && addr != nil && PcAddress.IP.Equal(addr.IP)
 }
 
 // processRobotCommands はロボットコマンドを処理する

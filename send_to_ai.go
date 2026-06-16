@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	thresholdFile  = "threshold.json"
+	thresholdFile    = "threshold.json"
 	sendInterval     = time.Second / 60
 	discoverInterval = 500 * time.Millisecond // DISCOVERは500ms間隔
 	okInterval       = 100 * time.Millisecond // OK_ROBOTは100ms間隔
@@ -83,6 +83,7 @@ func RunServer(done <-chan struct{}, myID uint32) {
 			if ConnectionState != StateDiscovering && time.Since(lastRecvTime) > robotTimeout {
 				log.Println("[AI TX] PC connection timed out. Reverting to DISCOVERING.")
 				ConnectionState = StateDiscovering
+				PcAddress = nil
 			}
 
 			// 今の通信状態とPCのIPをローカル変数にコピーして保持

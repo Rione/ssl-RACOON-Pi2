@@ -38,6 +38,7 @@ const (
 	UDP_RECV_PORT   int    = 20011        // AIからの受信ポート
 	UDP_CAMERA_PORT int    = 31133        // カメラデータ受信ポート
 	MULTICAST_ADDR  string = "224.5.69.4" // マルチキャストアドレス
+	PC_RECV_PORT    int    = 16941        // RAVENのロボット情報受信ポート
 	MULTICAST_PORT  string = "16941"      // マルチキャスト送信ポート
 )
 
@@ -133,10 +134,10 @@ const (
 
 // グローバル状態変数
 var (
-	StateMu         sync.Mutex           // 競合を防ぐための鍵（ロック）
+	StateMu         sync.Mutex   // 競合を防ぐための鍵（ロック）
 	ConnectionState int          = StateDiscovering
-	PcAddress       *net.UDPAddr         // 接続先PCのIPアドレスを記憶
-	
+	PcAddress       *net.UDPAddr // 接続先PCのIPアドレスを記憶
+
 	recvdata     RecvStruct              // 受信データ
 	lastRecvTime time.Time  = time.Now() // 最終受信時刻
 	imuError     bool       = false      // IMU速度超過フラグ
