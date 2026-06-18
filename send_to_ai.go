@@ -15,9 +15,9 @@ import (
 const (
 	thresholdFile    = "threshold.json"
 	sendInterval     = time.Second / 60
-	discoverInterval = 500 * time.Millisecond // DISCOVERは500ms間隔
-	okInterval       = 100 * time.Millisecond // OK_ROBOTは100ms間隔
-	robotTimeout     = 3 * time.Second        // PCから3s音沙汰がなければタイムアウト
+	discoverInterval = 1500 * time.Millisecond // DISCOVER再送間隔＊PCは最終通信から1.5s以内のDISCOVERを重複として破棄する
+	okInterval       = 100 * time.Millisecond  // OK_ROBOTは100ms間隔
+	robotTimeout     = 3 * time.Second         // PCから3s音沙汰がなければタイムアウト
 )
 
 // createStatus はRACOON-MWに送信するステータスメッセージを作成する
