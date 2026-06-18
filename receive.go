@@ -76,7 +76,8 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 					break
 				}
 
-				lastRecvTime = time.Now() // DATA受信で寿命タイマーリセット
+				lastRecvTime = time.Now()    // DATA受信で接続生存タイマーリセット
+				lastCmdRecvTime = time.Now() // 実コマンド受信。速度クリアのフェイルセーフ用タイマーをリセット
 
 				if n > 1 {
 					packet := &pb_gen.GrSim_Packet{}

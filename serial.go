@@ -69,6 +69,7 @@ func RunSerial(done <-chan struct{}, myID uint32) {
 	}
 
 	lastRecvTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	lastCmdRecvTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	for {
 		select {
@@ -252,7 +253,7 @@ func updateCameraCoordinates(sendbytes []byte) {
 
 // handleReceiveTimeout は受信タイムアウト時の処理を行う
 func handleReceiveTimeout(sendbytes []byte) {
-	if time.Since(lastRecvTime) > NO_RECV_TIMEOUT && !isControlByRobotMode {
+	if time.Since(lastCmdRecvTime) > NO_RECV_TIMEOUT && !isControlByRobotMode {
 		// 速度・ドリブル・キック値をクリア
 		for i := idxVelXLow; i <= idxChip; i++ {
 			sendbytes[i] = 0

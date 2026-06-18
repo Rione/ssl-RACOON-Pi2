@@ -138,9 +138,10 @@ var (
 	ConnectionState int          = StateDiscovering
 	PcAddress       *net.UDPAddr // 接続先PCのIPアドレスを記憶
 
-	recvdata     RecvStruct              // 受信データ
-	lastRecvTime time.Time  = time.Now() // 最終受信時刻
-	imuError     bool       = false      // IMU速度超過フラグ
+	recvdata        RecvStruct              // 受信データ
+	lastRecvTime    time.Time  = time.Now() // PCからの最終受信時刻(OFFER/OK_PC/DATA/KEEP_ALIVE)。接続生存判定・充電停止用
+	lastCmdRecvTime time.Time  = time.Now() // 最後にDATA(0x06)制御コマンドを受信した時刻。KEEP_ALIVEでは更新しない(速度クリアのフェイルセーフ用)
+	imuError        bool       = false      // IMU速度超過フラグ
 )
 
 // エラー状態
