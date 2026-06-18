@@ -1,4 +1,4 @@
-package main
+package mw
 
 import (
 	"encoding/json"
@@ -8,16 +8,17 @@ import (
 	"os"
 	"time"
 
+	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/util"
 	"github.com/Rione/ssl-RACOON-Pi2/proto/pb_gen"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
-	thresholdFile  = "threshold.json"
-	sendInterval   = 100 * time.Millisecond
+	thresholdFile = "threshold.json"
+	sendInterval  = 100 * time.Millisecond
 )
 
-// createStatus はRACOON-MWに送信するステータスメッセージを作成する
 func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbler bool,
 	batteryVoltage, capPower uint32, isBallExit bool, imageX, imageY float32,
 	minThreshold, maxThreshold string, ballDetectRadius int32, circularityThreshold float32,
@@ -49,16 +50,14 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 	}
 }
 
-// RunServer はRACOON-MWにボールセンサ等の情報を送信するサーバーである
 func RunServer(done <-chan struct{}, myID uint32) {
-	addr := MULTICAST_ADDR + ":" + MULTICAST_PORT
+	addr := state.MulticastAddr + ":" + state.MulticastPort
 	fmt.Println("Sender:", addr)
 
 	conn, err := net.Dial("udp", addr)
-	CheckError(err)
+	util.CheckError(err)
 	defer conn.Close()
 
-	// しきい値設定を読み込む（存在しなければ作成）
 	adjustment := loadOrCreateThresholdConfig()
 
 	ticker := time.NewTicker(sendInterval)
@@ -74,35 +73,31 @@ func RunServer(done <-chan struct{}, myID uint32) {
 	}
 }
 
-// loadOrCreateThresholdConfig はしきい値設定を読み込むか、存在しなければデフォルト値で作成する
-func loadOrCreateThresholdConfig() Adjustment {
+func loadOrCreateThresholdConfig() state.Adjustment {
 	if _, err := os.Stat(thresholdFile); os.IsNotExist(err) {
-		// ファイルが存在しない場合、デフォルト値で作成
-		if err := saveAdjustmentConfig(defaultAdjustment); err != nil {
+		if err := saveAdjustmentConfig(state.DefaultAdjustment); err != nil {
 			log.Printf("しきい値ファイル作成エラー: %v", err)
 		}
-		return defaultAdjustment
+		return state.DefaultAdjustment
 	}
 
-	// ファイルから読み込み
 	file, err := os.Open(thresholdFile)
 	if err != nil {
 		log.Printf("しきい値ファイル読み込みエラー: %v", err)
-		return defaultAdjustment
+		return state.DefaultAdjustment
 	}
 	defer file.Close()
 
-	var adjustment Adjustment
+	var adjustment state.Adjustment
 	if err := json.NewDecoder(file).Decode(&adjustment); err != nil {
 		log.Printf("しきい値JSONデコードエラー: %v", err)
-		return defaultAdjustment
+		return state.DefaultAdjustment
 	}
 
 	return adjustment
 }
 
-// saveAdjustmentConfig はしきい値設定をファイルに保存する
-func saveAdjustmentConfig(adjustment Adjustment) error {
+func saveAdjustmentConfig(adjustment state.Adjustment) error {
 	jsonData, err := json.Marshal(adjustment)
 	if err != nil {
 		return fmt.Errorf("JSON変換エラー: %w", err)
@@ -110,19 +105,17 @@ func saveAdjustmentConfig(adjustment Adjustment) error {
 	return os.WriteFile(thresholdFile, jsonData, 0644)
 }
 
-// sendStatusToMW はRACOON-MWにステータス情報を送信する
-func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
-	// センサー情報をビットマスクで取得
-	detectPhotoSensor := recvdata.SensorInformation&SENSOR_PHOTO_MASK != 0
-	detectDribblerSensor := recvdata.SensorInformation&SENSOR_DRIBBLER_MASK != 0
-	isNewDribbler := recvdata.SensorInformation&SENSOR_NEW_DRIB_MASK != 0
+func sendStatusToMW(conn net.Conn, myID uint32, adjustment state.Adjustment) {
+	detectPhotoSensor := state.Recvdata.SensorInformation&state.SensorPhotoMask != 0
+	detectDribblerSensor := state.Recvdata.SensorInformation&state.SensorDribblerMask != 0
+	isNewDribbler := state.Recvdata.SensorInformation&state.SensorNewDribMask != 0
 
 	var isBallExit bool
 	var imageX, imageY float32
-	if imageData != nil {
-		isBallExit = imageData.IsBallExit
-		imageX = imageData.ImageX
-		imageY = imageData.ImageY
+	if state.ImageDataPtr != nil {
+		isBallExit = state.ImageDataPtr.IsBallExit
+		imageX = state.ImageDataPtr.ImageX
+		imageY = state.ImageDataPtr.ImageY
 	}
 
 	status := createStatus(
@@ -130,8 +123,8 @@ func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
 		detectPhotoSensor,
 		detectDribblerSensor,
 		isNewDribbler,
-		uint32(recvdata.Volt),
-		uint32(recvdata.CapPower),
+		uint32(state.Recvdata.Volt),
+		uint32(state.Recvdata.CapPower),
 		isBallExit,
 		imageX,
 		imageY,
@@ -139,10 +132,10 @@ func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
 		adjustment.MaxThreshold,
 		int32(adjustment.BallDetectRadius),
 		adjustment.CircularityThreshold,
-		flWheelSpeedRadS,
-		blWheelSpeedRadS,
-		brWheelSpeedRadS,
-		frWheelSpeedRadS,
+		state.FlWheelSpeedRadS,
+		state.BlWheelSpeedRadS,
+		state.BrWheelSpeedRadS,
+		state.FrWheelSpeedRadS,
 	)
 
 	data, err := proto.Marshal(status)
@@ -154,4 +147,8 @@ func sendStatusToMW(conn net.Conn, myID uint32, adjustment Adjustment) {
 	if _, err := conn.Write(data); err != nil {
 		log.Printf("UDP send error: %v", err)
 	}
+}
+
+func SaveAdjustmentConfig(adjustment state.Adjustment) error {
+	return saveAdjustmentConfig(adjustment)
 }

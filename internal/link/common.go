@@ -1,0 +1,138 @@
+//go:build pi4 || rock5a
+
+package link
+
+import (
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
+)
+
+var (
+	isSignalReceived     bool
+	prevIsSignalReceived bool
+)
+
+var (
+	prevImageX int
+	prevImageY int
+	zeroCountX int
+	zeroCountY int
+)
+
+const zeroTolerance = 5
+
+func PrepareSendData() []byte {
+	sendbytes := frame.EnsureSendFrame()
+
+	updateCameraCoordinates(sendbytes)
+	handleReceiveTimeout(sendbytes)
+
+	if state.IsControlByRobotMode {
+		sendbytes[frame.IdxInfo] |= state.InfoCtrlByRobot
+	}
+
+	if time.Since(state.LastRecvTime) > state.ChargeStopTimeout {
+		sendbytes[frame.IdxInfo] &= ^uint8(state.InfoDoCharge)
+	}
+
+	handleReceiveStateChange()
+
+	if state.KickerEnable {
+		sendbytes[frame.IdxKick] = state.KickerVal
+	} else {
+		sendbytes[frame.IdxKick] = 0
+	}
+
+	return sendbytes
+}
+
+func CheckBatteryStatus() {
+	if state.Recvdata.Volt < uint8(state.BatteryCriticalThreshold) {
+		state.IsRobotError = true
+		state.RobotErrorCode = 2
+		state.RobotErrorMessage = "バッテリ電圧異常(回路故障の可能性)"
+	} else if state.Recvdata.Volt < uint8(state.BatteryLowThreshold) {
+		state.IsRobotError = true
+		state.RobotErrorCode = 2
+		state.RobotErrorMessage = "バッテリ電圧異常"
+	}
+}
+
+func FinishLinkCycle() {
+	prevIsSignalReceived = isSignalReceived
+}
+
+func updateCameraCoordinates(sendbytes []byte) {
+	if state.ImageDataPtr == nil {
+		sendbytes[frame.IdxCamBallX] = 0
+		sendbytes[frame.IdxCamBallY] = 0
+		return
+	}
+
+	if state.ImageDataPtr.ImageX == 0 {
+		zeroCountX++
+		if zeroCountX <= zeroTolerance {
+			sendbytes[frame.IdxCamBallX] = byte(prevImageX)
+		} else {
+			sendbytes[frame.IdxCamBallX] = 0
+		}
+	} else {
+		scaledX := int(state.ImageDataPtr.ImageX * 255 / 639)
+		sendbytes[frame.IdxCamBallX] = byte(scaledX)
+		prevImageX = scaledX
+		zeroCountX = 0
+	}
+
+	if state.ImageDataPtr.ImageY == 0 {
+		zeroCountY++
+		if zeroCountY <= zeroTolerance {
+			sendbytes[frame.IdxCamBallY] = byte(prevImageY)
+		} else {
+			sendbytes[frame.IdxCamBallY] = 0
+		}
+	} else {
+		scaledY := int(state.ImageDataPtr.ImageY / 10)
+		sendbytes[frame.IdxCamBallY] = byte(scaledY)
+		prevImageY = scaledY
+		zeroCountY = 0
+	}
+}
+
+func handleReceiveTimeout(sendbytes []byte) {
+	if time.Since(state.LastRecvTime) > state.NoRecvTimeout && !state.IsControlByRobotMode {
+		for i := frame.IdxVelXLow; i <= frame.IdxChip; i++ {
+			sendbytes[i] = 0
+		}
+		sendbytes[frame.IdxInfo] &= ^uint8(state.InfoSignalReceived)
+		isSignalReceived = false
+	} else {
+		sendbytes[frame.IdxInfo] |= state.InfoSignalReceived
+		isSignalReceived = true
+	}
+}
+
+func handleReceiveStateChange() {
+	if !isSignalReceived && prevIsSignalReceived {
+		log.Println("No Data Recv")
+		RingBuzzerAsync(3, 500*time.Millisecond, 0)
+	}
+
+	if isSignalReceived && !prevIsSignalReceived {
+		RingBuzzerAsync(10, 500*time.Millisecond, 0)
+	}
+}
+
+func LogSendData(sendbytes []byte) {
+	velx := int16(sendbytes[frame.IdxVelXLow]) | int16(sendbytes[frame.IdxVelXHigh])<<8
+	vely := int16(sendbytes[frame.IdxVelYLow]) | int16(sendbytes[frame.IdxVelYHigh])<<8
+	velang := int16(sendbytes[frame.IdxVelAngLow]) | int16(sendbytes[frame.IdxVelAngHigh])<<8
+
+	log.Printf("[Link TX] VelX: %d, VelY: %d, VelAng: %d, Dribble: %d, Kick: %d, Chip: %d, Info: 0b%08b",
+		velx, vely, velang, sendbytes[frame.IdxDribble], sendbytes[frame.IdxKick], sendbytes[frame.IdxChip], sendbytes[frame.IdxInfo])
+	log.Printf("[Link TX] CamBallX: %d, CamBallY: %d, Raw: %v",
+		sendbytes[frame.IdxCamBallX], sendbytes[frame.IdxCamBallY], sendbytes)
+	fmt.Println("---")
+}

@@ -1,4 +1,4 @@
-package main
+package receive
 
 import (
 	"bytes"
@@ -9,22 +9,28 @@ import (
 	"net"
 	"time"
 
+	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/util"
 	"github.com/Rione/ssl-RACOON-Pi2/proto/pb_gen"
 	"google.golang.org/protobuf/proto"
 )
 
-// ダイレクトキック判定用のしきい値
 const directKickThreshold float32 = 100
 
-// RunClient はAIからの制御コマンドを受信するUDPクライアントである
+var playBallDetectedSound func()
+
+func SetPlayBallDetectedSound(fn func()) {
+	playBallDetectedSound = fn
+}
+
 func RunClient(done <-chan struct{}, myID uint32, ip string) {
 	serverAddr := &net.UDPAddr{
 		IP:   net.ParseIP(ip),
-		Port: UDP_RECV_PORT,
+		Port: state.UDPRecvPort,
 	}
 
 	serverConn, err := net.ListenUDP("udp", serverAddr)
-	CheckError(err)
+	util.CheckError(err)
 	defer serverConn.Close()
 
 	buf := make([]byte, 1024)
@@ -35,7 +41,7 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 			return
 		default:
 			n, _, _ := serverConn.ReadFromUDP(buf)
-			lastRecvTime = time.Now()
+			state.LastRecvTime = time.Now()
 
 			packet := &pb_gen.GrSim_Packet{}
 			if err := proto.Unmarshal(buf[0:n], packet); err != nil {
@@ -47,11 +53,10 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 	}
 }
 
-// processRobotCommands はロボットコマンドを処理する
 func processRobotCommands(packet *pb_gen.GrSim_Packet, myID uint32) {
 	robotCmds := packet.Commands.GetRobotCommands()
 
-	if debugReceive {
+	if state.DebugReceive {
 		log.Printf("[AI RX] Received packet with %d robot commands", len(robotCmds))
 	}
 
@@ -60,7 +65,7 @@ func processRobotCommands(packet *pb_gen.GrSim_Packet, myID uint32) {
 			continue
 		}
 
-		if debugReceive {
+		if state.DebugReceive {
 			logReceivedCommand(cmd)
 		}
 
@@ -68,7 +73,6 @@ func processRobotCommands(packet *pb_gen.GrSim_Packet, myID uint32) {
 	}
 }
 
-// logReceivedCommand はデバッグ用にコマンドをログ出力する
 func logReceivedCommand(cmd *pb_gen.GrSim_Robot_Command) {
 	log.Printf("[AI RX] === Robot ID: %d (Match) ===", cmd.GetId())
 	log.Printf("[AI RX] VelTangent: %.3f m/s, VelNormal: %.3f m/s, VelAngular: %.3f rad/s",
@@ -78,18 +82,16 @@ func logReceivedCommand(cmd *pb_gen.GrSim_Robot_Command) {
 	fmt.Println("---")
 }
 
-// processCommand はロボットコマンドを処理し、送信データを構築する
 func processCommand(cmd *pb_gen.GrSim_Robot_Command) {
 	kickSpeedX := cmd.GetKickspeedx()
 	kickSpeedZ := cmd.GetKickspeedz()
 
-	// ダイレクトキック判定（100以上の場合）
 	if kickSpeedX >= directKickThreshold {
-		doDirectKick = true
+		state.DoDirectKick = true
 		kickSpeedX -= directKickThreshold
 	}
 	if kickSpeedZ >= directKickThreshold {
-		doDirectChipKick = true
+		state.DoDirectChipKick = true
 		kickSpeedZ -= directKickThreshold
 	}
 
@@ -98,21 +100,17 @@ func processCommand(cmd *pb_gen.GrSim_Robot_Command) {
 	velAngular := float64(cmd.GetVelangular())
 	spinner := cmd.GetSpinner()
 
-	// キック情報をログ出力
 	if kickSpeedX > 0 || kickSpeedZ > 0 {
 		log.Printf("ID: %d, KickX: %.2f, KickZ: %.2f, VelT: %.2f, VelN: %.2f, VelA: %.2f, Spinner: %t",
 			cmd.GetId(), cmd.GetKickspeedx(), cmd.GetKickspeedz(), velTangent, velNormal, velAngular, spinner)
 	}
 
-	// 送信データを構築
-	bytearray := SendStruct{
-		preamble: 0xFF,
-		velx:     int16(velTangent * 1000), // m/s → mm/s
-		vely:     int16(velNormal * 1000),  // m/s → mm/s
-		velang:   int16(velAngular * 1000), // rad/s → mrad/s
+	payload := state.SendPayload{
+		VelX:   int16(velTangent * 1000),
+		VelY:   int16(velNormal * 1000),
+		VelAng: int16(velAngular * 1000),
 	}
 
-	// ドリブラー設定
 	if spinner {
 		spinnerVel := cmd.GetWheel1()
 		if spinnerVel > 100 {
@@ -120,53 +118,48 @@ func processCommand(cmd *pb_gen.GrSim_Robot_Command) {
 		} else if spinnerVel < 0 {
 			spinnerVel = 0
 		}
-		bytearray.dribblePower = uint8(spinnerVel)
+		payload.DribblePower = uint8(spinnerVel)
 	}
 
-	// キッカー設定
 	if kickSpeedX > 0 {
-		kickerVal = uint8(kickSpeedX * 10)
-		kickerEnable = true
+		state.KickerVal = uint8(kickSpeedX * 10)
+		state.KickerEnable = true
 	}
-	if kickerEnable {
-		bytearray.kickPower = kickerVal
+	if state.KickerEnable {
+		payload.KickPower = state.KickerVal
 	}
 
-	// チップキック設定
 	if kickSpeedZ > 0 {
-		chipVal = uint8(kickSpeedZ * 10)
-		chipEnable = true
+		state.ChipVal = uint8(kickSpeedZ * 10)
+		state.ChipEnable = true
 	}
-	if chipEnable {
-		bytearray.chipPower = chipVal
+	if state.ChipEnable {
+		payload.ChipPower = state.ChipVal
 	}
 
-	// informationsビットフラグを設定
-	bytearray.informations &= ^uint8(INFO_EMG_STOP) // 緊急停止OFF
-	if doDirectKick {
-		bytearray.informations |= INFO_DIRECT_KICK
+	payload.Informations &= ^uint8(state.InfoEmgStop)
+	if state.DoDirectKick {
+		payload.Informations |= state.InfoDirectKick
 	}
-	if doDirectChipKick {
-		bytearray.informations |= INFO_DIRECT_CHIP
+	if state.DoDirectChipKick {
+		payload.Informations |= state.InfoDirectChip
 	}
-	bytearray.informations |= INFO_DO_CHARGE // 充電ON
+	payload.Informations |= state.InfoDoCharge
 
-	// バイナリに変換
-	sendarray = bytes.Buffer{}
-	if err := binary.Write(&sendarray, binary.LittleEndian, bytearray); err != nil {
+	state.SendArray = bytes.Buffer{}
+	if err := binary.Write(&state.SendArray, binary.LittleEndian, payload); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// ReceiveData はカメラからの画像データを受信する
 func ReceiveData(done <-chan struct{}, myID uint32, ip string) {
 	serverAddr := &net.UDPAddr{
 		IP:   net.ParseIP(ip),
-		Port: UDP_CAMERA_PORT,
+		Port: state.UDPCameraPort,
 	}
 
 	serverConn, err := net.ListenUDP("udp", serverAddr)
-	CheckError(err)
+	util.CheckError(err)
 	defer serverConn.Close()
 
 	buf := make([]byte, 20240)
@@ -178,20 +171,21 @@ func ReceiveData(done <-chan struct{}, myID uint32, ip string) {
 		default:
 			n, _, _ := serverConn.ReadFromUDP(buf)
 
-			jsonData := &ImageData{}
+			jsonData := &state.ImageData{}
 			if err := json.Unmarshal(buf[0:n], jsonData); err != nil {
 				log.Printf("JSON unmarshal error: %v", err)
 				continue
 			}
 
-			imageData = jsonData
-			imageResponse.Frame = jsonData.Frame
+			state.ImageDataPtr = jsonData
+			state.ImageResponseData.Frame = jsonData.Frame
 
-			// ボールを新しく検出した（前回は検出していなかった）場合のみ、音再生ループを開始
-			if jsonData.IsBallExit && !prevBallDetected {
-				go playBallDetectedSound()
+			if jsonData.IsBallExit && !state.PrevBallDetected {
+				if playBallDetectedSound != nil {
+					go playBallDetectedSound()
+				}
 			}
-			prevBallDetected = jsonData.IsBallExit //時間放置による音の重なり阻止よりもタイミングが正確
+			state.PrevBallDetected = jsonData.IsBallExit
 		}
 	}
 }

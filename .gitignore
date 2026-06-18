@@ -1,4 +1,9 @@
 RACOON-Pi
 ssl-RACOON-Pi2
+racoon-pi2
+racoon-pi2-pi4
+racoon-pi2-rock5a
+spi_test
+dip-test
 .env
 .DS_Store
