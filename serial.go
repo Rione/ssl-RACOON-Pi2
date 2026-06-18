@@ -68,8 +68,8 @@ func RunSerial(done <-chan struct{}, myID uint32) {
 		log.Fatal(err)
 	}
 
-	lastRecvTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	lastCmdRecvTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	lastRecvTime.Store(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	lastCmdRecvTime.Store(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
 
 	for {
 		select {
@@ -195,7 +195,7 @@ func prepareSendData() []byte {
 	}
 
 	// 長時間未受信の場合は充電停止
-	if time.Since(lastRecvTime) > CHARGE_STOP_TIMEOUT {
+	if lastRecvTime.Since() > CHARGE_STOP_TIMEOUT {
 		sendbytes[idxInfo] &= ^uint8(INFO_DO_CHARGE)
 	}
 
@@ -253,7 +253,7 @@ func updateCameraCoordinates(sendbytes []byte) {
 
 // handleReceiveTimeout は受信タイムアウト時の処理を行う
 func handleReceiveTimeout(sendbytes []byte) {
-	if time.Since(lastCmdRecvTime) > NO_RECV_TIMEOUT && !isControlByRobotMode {
+	if lastCmdRecvTime.Since() > NO_RECV_TIMEOUT && !isControlByRobotMode {
 		// 速度・ドリブル・キック値をクリア
 		for i := idxVelXLow; i <= idxChip; i++ {
 			sendbytes[i] = 0

@@ -61,13 +61,13 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 			case 0x02: // OFFER
 				PcAddress = pcReceiveAddr(addr) // PCのIPアドレスとRAVEN受信ポートを記憶
 				ConnectionState = StateOffered
-				lastRecvTime = time.Now() // OFFERED滞留中にタイムアウトで即DISCOVERINGへ戻るのを防ぐ
+				lastRecvTime.Store(time.Now()) // OFFERED滞留中にタイムアウトで即DISCOVERINGへ戻るのを防ぐ
 				log.Printf("[AI RX] Received OFFER from %s. State -> OFFERED", PcAddress.String())
 
 			case 0x04: // OK_PC
 				if ConnectionState == StateOffered && isSamePcIP(addr) {
 					ConnectionState = StateConnected
-					lastRecvTime = time.Now()
+					lastRecvTime.Store(time.Now())
 					log.Printf("[AI RX] Received OK_PC from %s. State -> CONNECTED", addr.IP.String())
 				}
 
@@ -76,8 +76,8 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 					break
 				}
 
-				lastRecvTime = time.Now()    // DATA受信で接続生存タイマーリセット
-				lastCmdRecvTime = time.Now() // 実コマンド受信。速度クリアのフェイルセーフ用タイマーをリセット
+				lastRecvTime.Store(time.Now())    // DATA受信で接続生存タイマーリセット
+				lastCmdRecvTime.Store(time.Now()) // 実コマンド受信。速度クリアのフェイルセーフ用タイマーをリセット
 
 				if n > 1 {
 					packet := &pb_gen.GrSim_Packet{}
@@ -94,7 +94,7 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 					break
 				}
 
-				lastRecvTime = time.Now() // KEEP_ALIVE受信でも寿命リセット
+				lastRecvTime.Store(time.Now()) // KEEP_ALIVE受信でも寿命リセット
 			}
 			StateMu.Unlock()
 		}

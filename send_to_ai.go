@@ -80,7 +80,7 @@ func RunServer(done <-chan struct{}, myID uint32) {
 			StateMu.Lock()
 
 			// PCから3s何も届かなかったら接続リセット
-			if ConnectionState != StateDiscovering && time.Since(lastRecvTime) > robotTimeout {
+			if ConnectionState != StateDiscovering && lastRecvTime.Since() > robotTimeout {
 				log.Println("[AI TX] PC connection timed out. Reverting to DISCOVERING.")
 				ConnectionState = StateDiscovering
 				PcAddress = nil

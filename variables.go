@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -132,17 +133,40 @@ const (
 	INFO_CTRL_BY_ROBOT   = 0b01000000 // ロボット制御モード
 )
 
+// atomicTime は time.Time を複数goroutineからロックなしで読み書きするためのラッパ
+// 内部は UnixNano(int64) を atomic で保持する。
+type atomicTime struct {
+	nano atomic.Int64
+}
+
+func (a *atomicTime) Store(t time.Time) { a.nano.Store(t.UnixNano()) }
+
+// Since は保持時刻から現在までの経過時間を返す（time.Since 相当）
+func (a *atomicTime) Since() time.Duration {
+	return time.Duration(time.Now().UnixNano() - a.nano.Load())
+}
+
 // グローバル状態変数
 var (
 	StateMu         sync.Mutex   // 競合を防ぐための鍵（ロック）
 	ConnectionState int          = StateDiscovering
 	PcAddress       *net.UDPAddr // 接続先PCのIPアドレスを記憶
 
-	recvdata        RecvStruct              // 受信データ
-	lastRecvTime    time.Time  = time.Now() // PCからの最終受信時刻(OFFER/OK_PC/DATA/KEEP_ALIVE)。接続生存判定・充電停止用
-	lastCmdRecvTime time.Time  = time.Now() // 最後にDATA(0x06)制御コマンドを受信した時刻。KEEP_ALIVEでは更新しない(速度クリアのフェイルセーフ用)
-	imuError        bool       = false      // IMU速度超過フラグ
+	recvdata RecvStruct         // 受信データ
+	imuError bool       = false // IMU速度超過フラグ
+
+	// lastRecvTime / lastCmdRecvTime は serial / receive / send_to_ai の複数goroutineから
+	// （StateMu の内外問わず）読み書きされるため、データ競合を避けて atomic で保持する。
+	lastRecvTime    atomicTime // PCからの最終受信時刻(OFFER/OK_PC/DATA/KEEP_ALIVE)。接続生存判定・充電停止用
+	lastCmdRecvTime atomicTime // 最後にDATA(0x06)制御コマンドを受信した時刻。KEEP_ALIVEでは更新しない(速度クリアのフェイルセーフ用)
 )
+
+func init() {
+	// RunSerial 起動時に 2000年へ上書きされる
+	now := time.Now()
+	lastRecvTime.Store(now)
+	lastCmdRecvTime.Store(now)
+}
 
 // エラー状態
 var (
