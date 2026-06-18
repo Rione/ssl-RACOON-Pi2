@@ -61,6 +61,7 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 			case 0x02: // OFFER
 				PcAddress = pcReceiveAddr(addr) // PCのIPアドレスとRAVEN受信ポートを記憶
 				ConnectionState = StateOffered
+				lastRecvTime = time.Now() // OFFERED滞留中にタイムアウトで即DISCOVERINGへ戻るのを防ぐ
 				log.Printf("[AI RX] Received OFFER from %s. State -> OFFERED", PcAddress.String())
 
 			case 0x04: // OK_PC
