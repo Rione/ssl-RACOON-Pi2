@@ -148,21 +148,16 @@ func (a *atomicTime) Since() time.Duration {
 
 // グローバル状態変数
 var (
-	StateMu         sync.Mutex   // 競合を防ぐための鍵（ロック）
+	StateMu         sync.Mutex   // 競合を防ぐためのロック
 	ConnectionState int          = StateDiscovering
 	PcAddress       *net.UDPAddr // 接続先PCのIPアドレスを記憶
-
-	recvdata RecvStruct         // 受信データ
-	imuError bool       = false // IMU速度超過フラグ
-
-	// lastRecvTime / lastCmdRecvTime は serial / receive / send_to_ai の複数goroutineから
-	// （StateMu の内外問わず）読み書きされるため、データ競合を避けて atomic で保持する。
-	lastRecvTime    atomicTime // PCからの最終受信時刻(OFFER/OK_PC/DATA/KEEP_ALIVE)。接続生存判定・充電停止用
-	lastCmdRecvTime atomicTime // 最後にDATA(0x06)制御コマンドを受信した時刻。KEEP_ALIVEでは更新しない(速度クリアのフェイルセーフ用)
+	recvdata RecvStruct          // 受信データ
+	imuError bool       = false  // IMU速度超過フラグ
+	lastRecvTime    atomicTime   // PCからの最終受信時刻(OFFER/OK_PC/DATA/KEEP_ALIVE)。接続生存判定・充電停止用
+	lastCmdRecvTime atomicTime   // 最後にDATA(0x06)制御コマンドを受信した時刻。KEEP_ALIVEでは更新しない(速度クリアのフェイルセーフ用)
 )
 
 func init() {
-	// RunSerial 起動時に 2000年へ上書きされる
 	now := time.Now()
 	lastRecvTime.Store(now)
 	lastCmdRecvTime.Store(now)
