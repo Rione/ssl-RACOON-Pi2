@@ -34,7 +34,7 @@ func PrepareSendData() []byte {
 		sendbytes[frame.IdxInfo] |= state.InfoCtrlByRobot
 	}
 
-	if time.Since(state.LastRecvTime) > state.ChargeStopTimeout {
+	if state.LastRecvTime.Since() > state.ChargeStopTimeout {
 		sendbytes[frame.IdxInfo] &= ^uint8(state.InfoDoCharge)
 	}
 
@@ -102,7 +102,7 @@ func updateCameraCoordinates(sendbytes []byte) {
 }
 
 func handleReceiveTimeout(sendbytes []byte) {
-	if time.Since(state.LastRecvTime) > state.NoRecvTimeout && !state.IsControlByRobotMode {
+	if state.LastCmdRecvTime.Since() > state.NoRecvTimeout && !state.IsControlByRobotMode {
 		for i := frame.IdxVelXLow; i <= frame.IdxChip; i++ {
 			sendbytes[i] = 0
 		}

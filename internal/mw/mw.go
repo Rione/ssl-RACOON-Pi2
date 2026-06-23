@@ -15,8 +15,11 @@ import (
 )
 
 const (
-	thresholdFile = "threshold.json"
-	sendInterval  = 100 * time.Millisecond
+	thresholdFile    = "threshold.json"
+	sendInterval     = time.Second / 60
+	discoverInterval = 1500 * time.Millisecond // DISCOVER再送間隔。PCは最終通信から1.5s以内のDISCOVERを重複として破棄する
+	okInterval       = 100 * time.Millisecond
+	robotTimeout     = 3 * time.Second // PCから3s音沙汰がなければタイムアウト
 )
 
 func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbler bool,
@@ -51,10 +54,10 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 }
 
 func RunServer(done <-chan struct{}, myID uint32) {
-	addr := state.MulticastAddr + ":" + state.MulticastPort
-	fmt.Println("Sender:", addr)
+	mcastAddr, err := net.ResolveUDPAddr("udp", state.MulticastAddr+":"+state.MulticastPort)
+	util.CheckError(err)
 
-	conn, err := net.Dial("udp", addr)
+	conn, err := net.ListenUDP("udp", nil)
 	util.CheckError(err)
 	defer conn.Close()
 
@@ -63,12 +66,51 @@ func RunServer(done <-chan struct{}, myID uint32) {
 	ticker := time.NewTicker(sendInterval)
 	defer ticker.Stop()
 
+	var lastDiscoverTime time.Time
+	var lastOkTime time.Time
+
 	for {
 		select {
 		case <-done:
 			return
 		case <-ticker.C:
-			sendStatusToMW(conn, myID, adjustment)
+			state.StateMu.Lock()
+
+			if state.ConnectionState != state.StateDiscovering && state.LastRecvTime.Since() > robotTimeout {
+				log.Println("[AI TX] PC connection timed out. Reverting to DISCOVERING.")
+				state.ConnectionState = state.StateDiscovering
+				state.PcAddress = nil
+			}
+
+			currentState := state.ConnectionState
+			currentPcAddr := state.PcAddress
+
+			state.StateMu.Unlock()
+
+			switch currentState {
+			case state.StateDiscovering:
+				if time.Since(lastDiscoverTime) > discoverInterval {
+					header := []byte{byte((myID << 4) | 0x01)}
+					if _, err := conn.WriteToUDP(header, mcastAddr); err != nil {
+						log.Printf("Failed to send DISCOVER: %v", err)
+					}
+					lastDiscoverTime = time.Now()
+				}
+
+			case state.StateOffered:
+				if time.Since(lastOkTime) > okInterval && currentPcAddr != nil {
+					header := []byte{byte((myID << 4) | 0x03)}
+					if _, err := conn.WriteToUDP(header, currentPcAddr); err != nil {
+						log.Printf("Failed to send OK_ROBOT: %v", err)
+					}
+					lastOkTime = time.Now()
+				}
+
+			case state.StateConnected:
+				if currentPcAddr != nil {
+					sendStatusToMW(conn, currentPcAddr, myID, adjustment)
+				}
+			}
 		}
 	}
 }
@@ -105,7 +147,7 @@ func saveAdjustmentConfig(adjustment state.Adjustment) error {
 	return os.WriteFile(thresholdFile, jsonData, 0644)
 }
 
-func sendStatusToMW(conn net.Conn, myID uint32, adjustment state.Adjustment) {
+func sendStatusToMW(conn *net.UDPConn, targetAddr *net.UDPAddr, myID uint32, adjustment state.Adjustment) {
 	detectPhotoSensor := state.Recvdata.SensorInformation&state.SensorPhotoMask != 0
 	detectDribblerSensor := state.Recvdata.SensorInformation&state.SensorDribblerMask != 0
 	isNewDribbler := state.Recvdata.SensorInformation&state.SensorNewDribMask != 0
@@ -144,7 +186,10 @@ func sendStatusToMW(conn net.Conn, myID uint32, adjustment state.Adjustment) {
 		return
 	}
 
-	if _, err := conn.Write(data); err != nil {
+	header := byte((myID << 4) | 0x05)
+	sendData := append([]byte{header}, data...)
+
+	if _, err := conn.WriteToUDP(sendData, targetAddr); err != nil {
 		log.Printf("UDP send error: %v", err)
 	}
 }

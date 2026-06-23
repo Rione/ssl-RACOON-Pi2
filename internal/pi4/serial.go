@@ -35,7 +35,9 @@ func RunSerial(done <-chan struct{}, myID uint32) {
 		log.Fatal(err)
 	}
 
-	state.LastRecvTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	past := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	state.LastRecvTime.Store(past)
+	state.LastCmdRecvTime.Store(past)
 
 	for {
 		select {

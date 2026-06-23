@@ -34,23 +34,88 @@ func RunClient(done <-chan struct{}, myID uint32, ip string) {
 	defer serverConn.Close()
 
 	buf := make([]byte, 1024)
+	log.Printf("[AI RX] Started listening for PC on port %d...", state.UDPRecvPort)
 
 	for {
 		select {
 		case <-done:
 			return
 		default:
-			n, _, _ := serverConn.ReadFromUDP(buf)
-			state.LastRecvTime = time.Now()
-
-			packet := &pb_gen.GrSim_Packet{}
-			if err := proto.Unmarshal(buf[0:n], packet); err != nil {
-				log.Fatal("Error: ", err)
+			n, addr, err := serverConn.ReadFromUDP(buf)
+			if err != nil {
+				log.Printf("[AI RX] Error reading UDP message: %v", err)
+				continue
+			}
+			if n == 0 {
+				continue
 			}
 
-			processRobotCommands(packet, myID)
+			header := buf[0]
+			robotId := uint32((header >> 4) & 0x0F)
+			cmdId := header & 0x0F
+
+			if robotId != myID {
+				continue
+			}
+
+			state.StateMu.Lock()
+
+			switch cmdId {
+			case 0x02: // OFFER
+				state.PcAddress = pcReceiveAddr(addr)
+				state.ConnectionState = state.StateOffered
+				state.LastRecvTime.Store(time.Now())
+				log.Printf("[AI RX] Received OFFER from %s. State -> OFFERED", state.PcAddress.String())
+
+			case 0x04: // OK_PC
+				if state.ConnectionState == state.StateOffered && isSamePcIP(addr) {
+					state.ConnectionState = state.StateConnected
+					state.LastRecvTime.Store(time.Now())
+					log.Printf("[AI RX] Received OK_PC from %s. State -> CONNECTED", addr.IP.String())
+				}
+
+			case 0x06: // DATA (BotCmd)
+				if state.ConnectionState != state.StateConnected || !isSamePcIP(addr) {
+					break
+				}
+
+				state.LastRecvTime.Store(time.Now())
+				state.LastCmdRecvTime.Store(time.Now())
+
+				if n > 1 {
+					packet := &pb_gen.GrSim_Packet{}
+					if err := proto.Unmarshal(buf[1:n], packet); err != nil {
+						log.Printf("Error unmarshaling DATA: %v", err)
+					} else {
+						processRobotCommands(packet, myID)
+					}
+				}
+
+			case 0x07: // KEEP_ALIVE
+				if state.ConnectionState != state.StateConnected || !isSamePcIP(addr) {
+					break
+				}
+
+				state.LastRecvTime.Store(time.Now())
+			}
+			state.StateMu.Unlock()
 		}
 	}
+}
+
+func pcReceiveAddr(addr *net.UDPAddr) *net.UDPAddr {
+	if addr == nil {
+		return nil
+	}
+	return &net.UDPAddr{
+		IP:   append(net.IP(nil), addr.IP...),
+		Port: state.PCRecvPort,
+		Zone: addr.Zone,
+	}
+}
+
+func isSamePcIP(addr *net.UDPAddr) bool {
+	return state.PcAddress != nil && addr != nil && state.PcAddress.IP.Equal(addr.IP)
 }
 
 func processRobotCommands(packet *pb_gen.GrSim_Packet, myID uint32) {

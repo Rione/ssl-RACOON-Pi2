@@ -2,6 +2,9 @@ package state
 
 import (
 	"bytes"
+	"net"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -9,11 +12,12 @@ const (
 	BatteryLowThreshold      = 140
 	BatteryCriticalThreshold = 135
 
-	Port           = ":9191"
-	UDPRecvPort    = 20011
-	UDPCameraPort  = 31133
-	MulticastAddr  = "224.5.69.4"
-	MulticastPort  = "16941"
+	Port          = ":9191"
+	UDPRecvPort   = 20011
+	UDPCameraPort = 31133
+	MulticastAddr = "224.5.69.4"
+	MulticastPort = "16941"
+	PCRecvPort    = 16941
 
 	KickHoldDuration  = 500 * time.Millisecond
 	NoRecvTimeout     = 1 * time.Second
@@ -30,6 +34,23 @@ const (
 	InfoSignalReceived = 0b00100000
 	InfoCtrlByRobot    = 0b01000000
 )
+
+const (
+	StateDiscovering = 0
+	StateOffered     = 1
+	StateConnected   = 2
+)
+
+// AtomicTime は time.Time を複数goroutineからロックなしで読み書きするためのラッパ。
+type AtomicTime struct {
+	nano atomic.Int64
+}
+
+func (a *AtomicTime) Store(t time.Time) { a.nano.Store(t.UnixNano()) }
+
+func (a *AtomicTime) Since() time.Duration {
+	return time.Duration(time.Now().UnixNano() - a.nano.Load())
+}
 
 var SendArray bytes.Buffer
 
@@ -70,10 +91,23 @@ type SendPayload struct {
 }
 
 var (
-	Recvdata     RecvData
-	LastRecvTime time.Time = time.Now()
-	ImuError     bool      = false
+	Recvdata RecvData
+	ImuError bool = false
 )
+
+var (
+	StateMu         sync.Mutex
+	ConnectionState int = StateDiscovering
+	PcAddress       *net.UDPAddr
+	LastRecvTime    AtomicTime // OFFER/OK_PC/DATA/KEEP_ALIVE。接続生存・充電停止用
+	LastCmdRecvTime AtomicTime // DATA(0x06)のみ。速度クリアのフェイルセーフ用
+)
+
+func init() {
+	now := time.Now()
+	LastRecvTime.Store(now)
+	LastCmdRecvTime.Store(now)
+}
 
 var (
 	IsRobotError      = false
