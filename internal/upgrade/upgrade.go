@@ -1,4 +1,6 @@
-package main
+//go:build pi4 || rock5a
+
+package upgrade
 
 import (
 	"log"
@@ -10,17 +12,13 @@ import (
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
-// appVersion はビルド時に埋め込まれるバージョン情報である
-var appVersion string
+var Version string
 
-const (
-	githubRepo = "Rione/ssl-RACOON-Pi2"
-)
+const githubRepo = "Rione/ssl-RACOON-Pi2"
 
-// getVersion は現在のアプリケーションバージョンを取得する
 func getVersion() string {
-	if appVersion != "" {
-		return appVersion
+	if Version != "" {
+		return Version
 	}
 
 	buildInfo, ok := debug.ReadBuildInfo()
@@ -32,24 +30,21 @@ func getVersion() string {
 	return buildInfo.Main.Version
 }
 
-// confirmAndSelfUpdate はGitHubから最新版を確認し、必要に応じて自動更新を行う
-func confirmAndSelfUpdate() {
+func ConfirmAndSelfUpdate() {
 	currentVersion := getVersion()
-	log.Println("Current version:", currentVersion)
+	filters := assetFilters()
+	log.Printf("Self-update target: %s (asset filter: %v)", boardName(), filters)
 
 	if currentVersion == "(devel)" || currentVersion == "unknown" {
 		log.Println("NO VERSION INFO (DEV VERSION)")
 		return
 	}
 
-	// .envファイルからGitHubトークンを読み込む
-	if err := godotenv.Load(); err != nil {
-		log.Println("Error loading .env file:", err)
-		return
-	}
+	_ = godotenv.Load()
 
 	updater, err := selfupdate.NewUpdater(selfupdate.Config{
 		APIToken: os.Getenv("GITHUB_TOKEN"),
+		Filters:  filters,
 	})
 	if err != nil {
 		log.Println("Error occurred while creating the updater:", err)

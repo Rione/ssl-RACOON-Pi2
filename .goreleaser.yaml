@@ -1,9 +1,35 @@
 version: 2
 builds:
-  - goos:
+  - id: racoon-pi4
+    main: ./cmd/racoon-pi2
+    goos:
       - linux
     goarch:
       - arm64
-      - amd64
+      - arm
+    tags:
+      - pi4
+    binary: racoon-pi2-pi4
     ldflags:
-      - -s -w -X main.appVersion={{.Version}}
+      - -s -w -X github.com/Rione/ssl-RACOON-Pi2/internal/upgrade.Version={{.Version}}
+  - id: racoon-rock5a
+    main: ./cmd/racoon-pi2
+    goos:
+      - linux
+    goarch:
+      - arm64
+    tags:
+      - rock5a
+    binary: racoon-pi2-rock5a
+    ldflags:
+      - -s -w -X github.com/Rione/ssl-RACOON-Pi2/internal/upgrade.Version={{.Version}}
+
+archives:
+  - id: pi4
+    ids:
+      - racoon-pi4
+    name_template: "racoon-pi2-pi4_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: rock5a
+    ids:
+      - racoon-rock5a
+    name_template: "racoon-pi2-rock5a_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

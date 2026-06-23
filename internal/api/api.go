@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"encoding/json"
@@ -12,24 +12,26 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Rione/ssl-RACOON-Pi2/internal/link"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/mw"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
 )
 
 var pythonCmd *exec.Cmd
 
-// RunApi はAPIサーバーを起動し、HTTPリクエストを処理する
-func RunApi(done <-chan struct{}, myID uint32) {
-	// GitHubから最新のmain.pyを取得してPythonプロセスを開始
+func Run(done <-chan struct{}, myID uint32) {
 	if err := restartPythonProcess(); err != nil {
 		log.Printf("Pythonプロセス開始エラー（プログラムは継続します）: %v", err)
 	}
 
-	listener, err := net.Listen("tcp", PORT)
+	listener, err := net.Listen("tcp", state.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer listener.Close()
 
-	log.Printf("API Server listening on %s", PORT)
+	log.Printf("API Server listening on %s", state.Port)
 
 	for {
 		conn, err := listener.Accept()
@@ -42,7 +44,6 @@ func RunApi(done <-chan struct{}, myID uint32) {
 	}
 }
 
-// sendHTTPResponse はHTTPレスポンスを送信するヘルパー関数である
 func sendHTTPResponse(conn net.Conn, statusCode int, contentType string, body string) {
 	statusText := map[int]string{
 		200: "OK",
@@ -56,7 +57,6 @@ func sendHTTPResponse(conn net.Conn, statusCode int, contentType string, body st
 	fmt.Fprint(conn, body)
 }
 
-// sendErrorResponse はエラーレスポンスを送信するヘルパー関数である
 func sendErrorResponse(conn net.Conn, statusCode int) {
 	statusText := map[int]string{
 		400: "Bad Request",
@@ -66,7 +66,6 @@ func sendErrorResponse(conn net.Conn, statusCode int) {
 	sendHTTPResponse(conn, statusCode, "text/plain", body)
 }
 
-// handleRequest はHTTPリクエストを処理する
 func handleRequest(conn net.Conn) {
 	defer conn.Close()
 
@@ -115,7 +114,6 @@ func handleRequest(conn net.Conn) {
 	}
 }
 
-// handleBuzzer はブザーAPIを処理する
 func handleBuzzer(conn net.Conn, pathParts []string) {
 	if len(pathParts) < 5 {
 		sendErrorResponse(conn, 400)
@@ -135,18 +133,16 @@ func handleBuzzer(conn net.Conn, pathParts []string) {
 	}
 
 	sendHTTPResponse(conn, 200, "text/plain", "BUZZER OK\r\n")
-	ringBuzzer(tone, time.Duration(duration)*time.Millisecond, 0)
+	link.RingBuzzerSync(tone, time.Duration(duration)*time.Millisecond, 0)
 }
 
-// handleIgnoreBatteryLow はバッテリー低下警告無視APIを処理する
 func handleIgnoreBatteryLow(conn net.Conn) {
-	alarmIgnore = true
+	state.AlarmIgnore = true
 	sendHTTPResponse(conn, 200, "text/plain", "IGNORE BATTERY LOW OK\r\n")
 }
 
-// handleImage は画像取得APIを処理する
 func handleImage(conn net.Conn) {
-	response, err := json.Marshal(imageResponse.Frame)
+	response, err := json.Marshal(state.ImageResponseData.Frame)
 	if err != nil {
 		sendErrorResponse(conn, 500)
 		return
@@ -154,7 +150,6 @@ func handleImage(conn net.Conn) {
 	sendHTTPResponse(conn, 200, "application/json", string(response))
 }
 
-// handleUpdatePython はPython更新APIを処理する
 func handleUpdatePython(conn net.Conn) {
 	sendHTTPResponse(conn, 200, "text/plain", "UPDATE PYTHON OK\r\n")
 	if err := restartPythonProcess(); err != nil {
@@ -162,7 +157,6 @@ func handleUpdatePython(conn net.Conn) {
 	}
 }
 
-// handleChangeAdjustment はしきい値変更APIを処理する
 func handleChangeAdjustment(conn net.Conn, pathParts []string) {
 	if len(pathParts) < 6 {
 		sendErrorResponse(conn, 400)
@@ -184,15 +178,14 @@ func handleChangeAdjustment(conn net.Conn, pathParts []string) {
 		return
 	}
 
-	// しきい値設定をJSONファイルに保存
-	data := Adjustment{
+	data := state.Adjustment{
 		MinThreshold:         minThreshold,
 		MaxThreshold:         maxThreshold,
 		BallDetectRadius:     ballDetectRadius,
 		CircularityThreshold: float32(circularityThreshold),
 	}
 
-	if err := saveAdjustmentToFile(data); err != nil {
+	if err := mw.SaveAdjustmentConfig(data); err != nil {
 		log.Printf("しきい値保存エラー: %v", err)
 		sendErrorResponse(conn, 500)
 		return
@@ -205,20 +198,10 @@ func handleChangeAdjustment(conn net.Conn, pathParts []string) {
 	}
 }
 
-// saveAdjustmentToFile はしきい値設定をJSONファイルに保存する
-func saveAdjustmentToFile(data Adjustment) error {
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("JSON変換エラー: %w", err)
-	}
-	return os.WriteFile("threshold.json", jsonData, 0644)
-}
-
-// handleStatus はステータス取得APIを処理する
 func handleStatus(conn net.Conn) {
-	detectPhotoSensor := recvdata.SensorInformation&SENSOR_PHOTO_MASK != 0
-	detectDribblerSensor := recvdata.SensorInformation&SENSOR_DRIBBLER_MASK != 0
-	isNewDribbler := recvdata.SensorInformation&SENSOR_NEW_DRIB_MASK != 0
+	detectPhotoSensor := state.Recvdata.SensorInformation&state.SensorPhotoMask != 0
+	detectDribblerSensor := state.Recvdata.SensorInformation&state.SensorDribblerMask != 0
+	isNewDribbler := state.Recvdata.SensorInformation&state.SensorNewDribMask != 0
 
 	response := fmt.Sprintf(`{
 		"VOLT": %f,
@@ -228,7 +211,7 @@ func handleStatus(conn net.Conn) {
 		"ERROR": %t,
 		"ERRORCODE": %d,
 		"ERRORMESSAGE": "%s"
-	}`, float32(recvdata.Volt)/10.0, detectPhotoSensor, detectDribblerSensor, isNewDribbler, isRobotError, RobotErrorCode, RobotErrorMessage)
+	}`, float32(state.Recvdata.Volt)/10.0, detectPhotoSensor, detectDribblerSensor, isNewDribbler, state.IsRobotError, state.RobotErrorCode, state.RobotErrorMessage)
 
 	sendHTTPResponse(conn, 200, "application/json", response)
 }
@@ -239,7 +222,6 @@ const (
 	httpClientTimeout = 5 * time.Second
 )
 
-// updateMainPyFromGitHub はGitHubからmain.pyを取得し、必要に応じて更新する
 func updateMainPyFromGitHub() error {
 	client := &http.Client{Timeout: httpClientTimeout}
 
@@ -258,7 +240,6 @@ func updateMainPyFromGitHub() error {
 		return fmt.Errorf("レスポンス読み取りエラー: %w", err)
 	}
 
-	// ローカルファイルと比較
 	localContent, err := os.ReadFile(pythonScriptFile)
 	if err == nil && string(localContent) == string(githubContent) {
 		log.Println("main.pyは最新です。更新の必要はありません。")
@@ -277,9 +258,7 @@ func updateMainPyFromGitHub() error {
 	return nil
 }
 
-// restartPythonProcess はPythonプロセスを停止して再起動する
 func restartPythonProcess() error {
-	// 既存のプロセスを停止
 	if pythonCmd != nil && pythonCmd.Process != nil {
 		log.Println("既存のPythonプロセスを停止します。")
 		if err := pythonCmd.Process.Kill(); err != nil {
@@ -288,12 +267,10 @@ func restartPythonProcess() error {
 		pythonCmd.Wait()
 	}
 
-	// GitHubから最新のmain.pyを取得・更新を試行
 	if err := updateMainPyFromGitHub(); err != nil {
 		log.Printf("main.py更新エラー（ローカルファイルで継続）: %v", err)
 	}
 
-	// 新しいプロセスを開始
 	log.Println("Pythonプロセスを開始します。")
 	pythonCmd = exec.Command("python3", pythonScriptFile)
 	if err := pythonCmd.Start(); err != nil {

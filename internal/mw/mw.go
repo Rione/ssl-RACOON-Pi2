@@ -1,4 +1,4 @@
-package main
+package mw
 
 import (
 	"encoding/json"
@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/util"
 	"github.com/Rione/ssl-RACOON-Pi2/proto/pb_gen"
 	"google.golang.org/protobuf/proto"
 )
@@ -15,12 +17,11 @@ import (
 const (
 	thresholdFile    = "threshold.json"
 	sendInterval     = time.Second / 60
-	discoverInterval = 1500 * time.Millisecond // DISCOVER再送間隔＊PCは最終通信から1.5s以内のDISCOVERを重複として破棄する
-	okInterval       = 100 * time.Millisecond  // OK_ROBOTは100ms間隔
-	robotTimeout     = 3 * time.Second         // PCから3s音沙汰がなければタイムアウト
+	discoverInterval = 1500 * time.Millisecond // DISCOVER再送間隔。PCは最終通信から1.5s以内のDISCOVERを重複として破棄する
+	okInterval       = 100 * time.Millisecond
+	robotTimeout     = 3 * time.Second // PCから3s音沙汰がなければタイムアウト
 )
 
-// createStatus はRACOON-MWに送信するステータスメッセージを作成する
 func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbler bool,
 	batteryVoltage, capPower uint32, isBallExit bool, imageX, imageY float32,
 	minThreshold, maxThreshold string, ballDetectRadius int32, circularityThreshold float32,
@@ -52,17 +53,14 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 	}
 }
 
-// RunServer はRACOON-MWにボールセンサ等の情報を送信するサーバーである
 func RunServer(done <-chan struct{}, myID uint32) {
-	// DISCOVER用マルチキャストアドレス
-	mcastAddr, err := net.ResolveUDPAddr("udp", MULTICAST_ADDR+":"+MULTICAST_PORT)
-	CheckError(err)
+	mcastAddr, err := net.ResolveUDPAddr("udp", state.MulticastAddr+":"+state.MulticastPort)
+	util.CheckError(err)
 
 	conn, err := net.ListenUDP("udp", nil)
-	CheckError(err)
+	util.CheckError(err)
 	defer conn.Close()
 
-	// しきい値設定を読み込む（存在しなければ作成）
 	adjustment := loadOrCreateThresholdConfig()
 
 	ticker := time.NewTicker(sendInterval)
@@ -76,26 +74,21 @@ func RunServer(done <-chan struct{}, myID uint32) {
 		case <-done:
 			return
 		case <-ticker.C:
-			// 共有変数書き換えなのでロック
-			StateMu.Lock()
+			state.StateMu.Lock()
 
-			// PCから3s何も届かなかったら接続リセット
-			if ConnectionState != StateDiscovering && lastRecvTime.Since() > robotTimeout {
+			if state.ConnectionState != state.StateDiscovering && state.LastRecvTime.Since() > robotTimeout {
 				log.Println("[AI TX] PC connection timed out. Reverting to DISCOVERING.")
-				ConnectionState = StateDiscovering
-				PcAddress = nil
+				state.ConnectionState = state.StateDiscovering
+				state.PcAddress = nil
 			}
 
-			// 今の通信状態とPCのIPをローカル変数にコピーして保持
-			currentState := ConnectionState
-			currentPcAddr := PcAddress
+			currentState := state.ConnectionState
+			currentPcAddr := state.PcAddress
 
-			// コピーが終わったらすぐにロックを解除
-			StateMu.Unlock()
+			state.StateMu.Unlock()
 
 			switch currentState {
-			case StateDiscovering:
-				// DISCOVER(0x01)送信(マルチキャスト)
+			case state.StateDiscovering:
 				if time.Since(lastDiscoverTime) > discoverInterval {
 					header := []byte{byte((myID << 4) | 0x01)}
 					if _, err := conn.WriteToUDP(header, mcastAddr); err != nil {
@@ -104,8 +97,7 @@ func RunServer(done <-chan struct{}, myID uint32) {
 					lastDiscoverTime = time.Now()
 				}
 
-			case StateOffered:
-				// OK_ROBOT(0x03)送信(ユニキャスト)
+			case state.StateOffered:
 				if time.Since(lastOkTime) > okInterval && currentPcAddr != nil {
 					header := []byte{byte((myID << 4) | 0x03)}
 					if _, err := conn.WriteToUDP(header, currentPcAddr); err != nil {
@@ -114,8 +106,7 @@ func RunServer(done <-chan struct{}, myID uint32) {
 					lastOkTime = time.Now()
 				}
 
-			case StateConnected:
-				// DATA(0x05)を送信
+			case state.StateConnected:
 				if currentPcAddr != nil {
 					sendStatusToMW(conn, currentPcAddr, myID, adjustment)
 				}
@@ -124,35 +115,31 @@ func RunServer(done <-chan struct{}, myID uint32) {
 	}
 }
 
-// loadOrCreateThresholdConfig はしきい値設定を読み込むか、存在しなければデフォルト値で作成する
-func loadOrCreateThresholdConfig() Adjustment {
+func loadOrCreateThresholdConfig() state.Adjustment {
 	if _, err := os.Stat(thresholdFile); os.IsNotExist(err) {
-		// ファイルが存在しない場合、デフォルト値で作成
-		if err := saveAdjustmentConfig(defaultAdjustment); err != nil {
+		if err := saveAdjustmentConfig(state.DefaultAdjustment); err != nil {
 			log.Printf("しきい値ファイル作成エラー: %v", err)
 		}
-		return defaultAdjustment
+		return state.DefaultAdjustment
 	}
 
-	// ファイルから読み込み
 	file, err := os.Open(thresholdFile)
 	if err != nil {
 		log.Printf("しきい値ファイル読み込みエラー: %v", err)
-		return defaultAdjustment
+		return state.DefaultAdjustment
 	}
 	defer file.Close()
 
-	var adjustment Adjustment
+	var adjustment state.Adjustment
 	if err := json.NewDecoder(file).Decode(&adjustment); err != nil {
 		log.Printf("しきい値JSONデコードエラー: %v", err)
-		return defaultAdjustment
+		return state.DefaultAdjustment
 	}
 
 	return adjustment
 }
 
-// saveAdjustmentConfig はしきい値設定をファイルに保存する
-func saveAdjustmentConfig(adjustment Adjustment) error {
+func saveAdjustmentConfig(adjustment state.Adjustment) error {
 	jsonData, err := json.Marshal(adjustment)
 	if err != nil {
 		return fmt.Errorf("JSON変換エラー: %w", err)
@@ -160,19 +147,17 @@ func saveAdjustmentConfig(adjustment Adjustment) error {
 	return os.WriteFile(thresholdFile, jsonData, 0644)
 }
 
-// sendStatusToMW はRACOON-MWにステータス情報を送信する
-func sendStatusToMW(conn *net.UDPConn, targetAddr *net.UDPAddr, myID uint32, adjustment Adjustment) {
-	// センサー情報をビットマスクで取得
-	detectPhotoSensor := recvdata.SensorInformation&SENSOR_PHOTO_MASK != 0
-	detectDribblerSensor := recvdata.SensorInformation&SENSOR_DRIBBLER_MASK != 0
-	isNewDribbler := recvdata.SensorInformation&SENSOR_NEW_DRIB_MASK != 0
+func sendStatusToMW(conn *net.UDPConn, targetAddr *net.UDPAddr, myID uint32, adjustment state.Adjustment) {
+	detectPhotoSensor := state.Recvdata.SensorInformation&state.SensorPhotoMask != 0
+	detectDribblerSensor := state.Recvdata.SensorInformation&state.SensorDribblerMask != 0
+	isNewDribbler := state.Recvdata.SensorInformation&state.SensorNewDribMask != 0
 
 	var isBallExit bool
 	var imageX, imageY float32
-	if imageData != nil {
-		isBallExit = imageData.IsBallExit
-		imageX = imageData.ImageX
-		imageY = imageData.ImageY
+	if state.ImageDataPtr != nil {
+		isBallExit = state.ImageDataPtr.IsBallExit
+		imageX = state.ImageDataPtr.ImageX
+		imageY = state.ImageDataPtr.ImageY
 	}
 
 	status := createStatus(
@@ -180,8 +165,8 @@ func sendStatusToMW(conn *net.UDPConn, targetAddr *net.UDPAddr, myID uint32, adj
 		detectPhotoSensor,
 		detectDribblerSensor,
 		isNewDribbler,
-		uint32(recvdata.Volt),
-		uint32(recvdata.CapPower),
+		uint32(state.Recvdata.Volt),
+		uint32(state.Recvdata.CapPower),
 		isBallExit,
 		imageX,
 		imageY,
@@ -189,10 +174,10 @@ func sendStatusToMW(conn *net.UDPConn, targetAddr *net.UDPAddr, myID uint32, adj
 		adjustment.MaxThreshold,
 		int32(adjustment.BallDetectRadius),
 		adjustment.CircularityThreshold,
-		flWheelSpeedRadS,
-		blWheelSpeedRadS,
-		brWheelSpeedRadS,
-		frWheelSpeedRadS,
+		state.FlWheelSpeedRadS,
+		state.BlWheelSpeedRadS,
+		state.BrWheelSpeedRadS,
+		state.FrWheelSpeedRadS,
 	)
 
 	data, err := proto.Marshal(status)
@@ -201,11 +186,14 @@ func sendStatusToMW(conn *net.UDPConn, targetAddr *net.UDPAddr, myID uint32, adj
 		return
 	}
 
-	// 先頭1バイトヘッダを付加(RobotID << 4 | 0x05)
 	header := byte((myID << 4) | 0x05)
 	sendData := append([]byte{header}, data...)
 
 	if _, err := conn.WriteToUDP(sendData, targetAddr); err != nil {
 		log.Printf("UDP send error: %v", err)
 	}
+}
+
+func SaveAdjustmentConfig(adjustment state.Adjustment) error {
+	return saveAdjustmentConfig(adjustment)
 }
