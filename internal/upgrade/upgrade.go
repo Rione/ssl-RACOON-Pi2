@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/blang/semver"
 	"github.com/joho/godotenv"
@@ -30,12 +31,34 @@ func getVersion() string {
 	return buildInfo.Main.Version
 }
 
+func normalizeVersion(v string) string {
+	return strings.TrimPrefix(v, "v")
+}
+
+func isDevVersion(v string) bool {
+	switch v {
+	case "", "(devel)", "unknown":
+		return true
+	}
+	// go build 由来の pseudo-version (例: v1.0.1-0.20260623143125-eab18fdc67ec)
+	return strings.Contains(normalizeVersion(v), "-0.")
+}
+
+func parseCurrentVersion(v string) (semver.Version, bool) {
+	parsed, err := semver.Parse(normalizeVersion(v))
+	if err != nil {
+		log.Printf("Skipping self-update: cannot parse version %q: %v", v, err)
+		return semver.Version{}, false
+	}
+	return parsed, true
+}
+
 func ConfirmAndSelfUpdate() {
 	currentVersion := getVersion()
 	filters := assetFilters()
 	log.Printf("Self-update target: %s (asset filter: %v)", boardName(), filters)
 
-	if currentVersion == "(devel)" || currentVersion == "unknown" {
+	if isDevVersion(currentVersion) {
 		log.Println("NO VERSION INFO (DEV VERSION)")
 		return
 	}
@@ -62,7 +85,10 @@ func ConfirmAndSelfUpdate() {
 		return
 	}
 
-	currentSemVer := semver.MustParse(currentVersion)
+	currentSemVer, ok := parseCurrentVersion(currentVersion)
+	if !ok {
+		return
+	}
 	if latest.Version.Equals(currentSemVer) || !latest.Version.GT(currentSemVer) {
 		log.Println("Current version is the latest")
 		return
