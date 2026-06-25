@@ -11,9 +11,9 @@ import (
 	"go.bug.st/serial"
 )
 
-const recvPacketSize = 3
+const recvPacketSize = 12
 
-var serialPreamble = []byte{0xFF, 0x00, 0xFF, 0x00}
+var serialPreamble = []byte{0xFF}
 
 func RunSerial(done <-chan struct{}, myID uint32) {
 	port, err := serial.Open(SerialPortName, &serial.Mode{})
@@ -54,9 +54,19 @@ func processSerialCommunication(port serial.Port) {
 
 	state.Recvdata = parseRecvBuf(recvbuf)
 
+	state.FlWheelSpeedRadS = float32(state.Recvdata.FlWheelSpeed) / 100.0
+	state.BlWheelSpeedRadS = float32(state.Recvdata.BlWheelSpeed) / 100.0
+	state.BrWheelSpeedRadS = float32(state.Recvdata.BrWheelSpeed) / 100.0
+	state.FrWheelSpeedRadS = float32(state.Recvdata.FrWheelSpeed) / 100.0
+
 	if state.DebugSerial {
-		log.Printf("[Serial RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
-			state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower)
+		log.Printf("[Serial RX] Raw: % 02X", recvbuf)
+		log.Printf("[Serial RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d, Footer: 0x%02X",
+			state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower, state.Recvdata.Footer)
+		log.Printf("[Serial RX] Wheel(raw) FL: %d, BL: %d, BR: %d, FR: %d",
+			state.Recvdata.FlWheelSpeed, state.Recvdata.BlWheelSpeed, state.Recvdata.BrWheelSpeed, state.Recvdata.FrWheelSpeed)
+		log.Printf("[Serial RX] Wheel(rad/s) FL: %.2f, BL: %.2f, BR: %.2f, FR: %.2f",
+			state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
 	}
 
 	link.CheckBatteryStatus()
@@ -76,6 +86,11 @@ func parseRecvBuf(recvbuf []byte) state.RecvData {
 		Volt:              recvbuf[0],
 		SensorInformation: recvbuf[1],
 		CapPower:          recvbuf[2],
+		FlWheelSpeed:      int16(recvbuf[3]) | int16(recvbuf[4])<<8,
+		BlWheelSpeed:      int16(recvbuf[5]) | int16(recvbuf[6])<<8,
+		BrWheelSpeed:      int16(recvbuf[7]) | int16(recvbuf[8])<<8,
+		FrWheelSpeed:      int16(recvbuf[9]) | int16(recvbuf[10])<<8,
+		Footer:            recvbuf[11],
 	}
 }
 
