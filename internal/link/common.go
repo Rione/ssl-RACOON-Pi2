@@ -47,9 +47,27 @@ func PrepareSendData() []byte {
 		sendbytes[frame.IdxKick] = 0
 	}
 
+	if state.VelX1000 {
+		sendbytes[frame.IdxVelXLow] = byte(uint16(1000) & 0xff)
+		sendbytes[frame.IdxVelXHigh] = byte(uint16(1000) >> 8)
+	}
+
 	handleEmgStopChange(sendbytes)
 
 	return sendbytes
+}
+
+// PrepareHardwareTx returns the frame actually sent on serial/SPI.
+// In dry-run mode, motion fields (VelX/Y/Ang, dribble, kick, chip) are zeroed.
+func PrepareHardwareTx(sendbytes []byte) []byte {
+	if !state.DryRun {
+		return sendbytes
+	}
+	out := append([]byte(nil), sendbytes...)
+	for i := frame.IdxVelXLow; i <= frame.IdxChip; i++ {
+		out[i] = 0
+	}
+	return out
 }
 
 func CheckBatteryStatus() {

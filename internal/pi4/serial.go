@@ -72,12 +72,16 @@ func processSerialCommunication(port serial.Port) {
 	link.CheckBatteryStatus()
 
 	sendbytes := link.PrepareSendData()
+	hwbytes := link.PrepareHardwareTx(sendbytes)
 
 	if state.DebugSerial {
 		link.LogSendData(sendbytes)
+		if state.DryRun {
+			link.LogSendData(hwbytes)
+		}
 	}
 
-	port.Write(sendbytes)
+	port.Write(hwbytes)
 	link.FinishLinkCycle()
 }
 

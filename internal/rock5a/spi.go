@@ -42,18 +42,22 @@ func RunSPI(done <-chan struct{}, myID uint32) {
 	state.LastRecvTime.Store(past)
 	state.LastCmdRecvTime.Store(past)
 
+	ticker := time.NewTicker(SPIPeriodMs * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-done:
 			return
-		default:
+		case <-ticker.C:
 			processSPICommunication(conn)
 		}
 	}
 }
 
 func processSPICommunication(conn spi.Conn) {
-	tx := link.PrepareSendData()
+	sendbytes := link.PrepareSendData()
+	tx := link.PrepareHardwareTx(sendbytes)
 	rx := make([]byte, len(tx))
 
 	if err := conn.Tx(tx, rx); err != nil {
@@ -83,7 +87,10 @@ func processSPICommunication(conn spi.Conn) {
 		log.Printf("[SPI RX] Wheel(m/s) FL: %.3f, BL: %.3f, BR: %.3f, FR: %.3f",
 			state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
 		log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
-		link.LogSendData(tx)
+		link.LogSendData(sendbytes)
+		if state.DryRun {
+			link.LogSendData(tx)
+		}
 	}
 
 	link.CheckBatteryStatus()

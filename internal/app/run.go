@@ -107,6 +107,8 @@ func Run() {
 func parseFlags() {
 	flag.BoolVar(&state.DebugSerial, "ds", false, "ロボットリンク送受信のモニタリングを有効化")
 	flag.BoolVar(&state.DebugReceive, "dr", false, "AIからの受信結果表示を有効化")
+	flag.BoolVar(&state.DryRun, "dryrun", false, "serial/SPIへ速度・キック等の動作指令を送らない")
+	flag.BoolVar(&state.VelX1000, "velx1000", false, "テスト用: VelX=1000 を送信フレームに設定")
 	flag.Parse()
 
 	if state.DebugSerial {
@@ -114,6 +116,12 @@ func parseFlags() {
 	}
 	if state.DebugReceive {
 		log.Println("Debug Mode: AI receive monitoring enabled (-dr)")
+	}
+	if state.DryRun {
+		log.Println("Dry-run mode: motion commands are not sent on serial/SPI (-dryrun)")
+	}
+	if state.VelX1000 {
+		log.Println("Test mode: VelX=1000 (-velx1000)")
 	}
 }
 

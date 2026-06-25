@@ -9,6 +9,7 @@ const (
 	SPISpeedHz        = 1_000_000
 	SPIFrameSize      = 18
 	SPIRecvSize       = 11
+	SPIPeriodMs       = 8
 	WheelDiameterMm   = 60.0
 )
 

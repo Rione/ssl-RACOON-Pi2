@@ -162,6 +162,8 @@ var ImageResponseData ImageResponse
 var (
 	DebugSerial  bool = false
 	DebugReceive bool = false
+	DryRun       bool = false
+	VelX1000     bool = false
 )
 
 type Adjustment struct {
