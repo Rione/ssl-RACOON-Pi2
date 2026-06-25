@@ -3,12 +3,18 @@
 package upgrade
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 
 	"github.com/blang/semver"
+	"github.com/inconshreveable/go-update"
 	"github.com/joho/godotenv"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
@@ -96,11 +102,72 @@ func ConfirmAndSelfUpdate() {
 
 	log.Println("New version available:", latest.Version)
 
-	if _, err = updater.UpdateSelf(currentSemVer, githubRepo); err != nil {
+	cmdPath, err := os.Executable()
+	if err != nil {
+		log.Println("Error occurred while resolving executable path:", err)
+		return
+	}
+
+	if err = applyRelease(latest, cmdPath); err != nil {
 		log.Println("Error occurred while updating binary:", err)
 		return
 	}
 
 	log.Println("Successfully updated to version", latest.Version)
 	os.Exit(1)
+}
+
+func archiveBinaryNames(cmdPath string) []string {
+	seen := make(map[string]bool)
+	var names []string
+	add := func(name string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+
+	add(archiveBinaryName())
+	add(filepath.Base(cmdPath))
+	add("ssl-RACOON-Pi2")
+	add("racoon-pi2")
+	return names
+}
+
+func fetchReleaseAsset(rel *selfupdate.Release) ([]byte, error) {
+	resp, err := http.Get(rel.AssetURL)
+	if err != nil {
+		return nil, fmt.Errorf("download %s: %w", rel.AssetURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download %s: status %d", rel.AssetURL, resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func applyRelease(rel *selfupdate.Release, targetPath string) error {
+	data, err := fetchReleaseAsset(rel)
+	if err != nil {
+		return err
+	}
+
+	var lastErr error
+	for _, name := range archiveBinaryNames(targetPath) {
+		asset, err := selfupdate.UncompressCommand(bytes.NewReader(data), rel.AssetURL, name)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		log.Printf("Updating %s using archive binary %q", targetPath, name)
+		if err := update.Apply(asset, update.Options{TargetPath: targetPath}); err != nil {
+			return err
+		}
+		return nil
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("no archive binary name candidates for %s", targetPath)
 }

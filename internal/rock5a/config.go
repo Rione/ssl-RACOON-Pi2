@@ -8,10 +8,8 @@ const (
 	SPIDevPath   = "/dev/spidev4.0"
 	SPISpeedHz   = 1_000_000
 	SPIFrameSize = 18
-	SPIRecvSize  = 4
+	SPIRecvSize  = 11
 )
-
-var SPIExpectedRecvPayload = []byte{0x64, 0x78, 0x82, 0x8c}
 
 const (
 	PIN_LED1_BANK = 4

@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/Yuzz1e/rock5a-gpio-go v0.2.0
 	github.com/blang/semver v3.5.1+incompatible
+	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf
 	github.com/joho/godotenv v1.5.1
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/stianeikeland/go-rpio/v4 v4.6.0
@@ -19,7 +20,6 @@ require (
 	github.com/golang/protobuf v1.5.0 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
-	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf // indirect
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
 	github.com/ulikunitz/xz v0.5.9 // indirect
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect

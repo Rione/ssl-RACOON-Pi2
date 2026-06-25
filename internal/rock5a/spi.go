@@ -64,18 +64,25 @@ func processSPICommunication(conn spi.Conn) {
 	isSPIFrameValid = frameErr == nil
 	handleSPIFrameValidationChange(frameErr)
 
-	state.Recvdata.Volt = rx[0]
-	state.Recvdata.SensorInformation = rx[1]
-	state.Recvdata.CapPower = rx[2]
-	state.Recvdata.Reserved = rx[3]
+	state.Recvdata = parseRecvBuf(rx)
+
+	state.FlWheelSpeedRadS = float32(state.Recvdata.FlWheelSpeed) / 100.0
+	state.BlWheelSpeedRadS = float32(state.Recvdata.BlWheelSpeed) / 100.0
+	state.BrWheelSpeedRadS = float32(state.Recvdata.BrWheelSpeed) / 100.0
+	state.FrWheelSpeedRadS = float32(state.Recvdata.FrWheelSpeed) / 100.0
 
 	if state.DebugSerial {
 		if frameErr != nil {
 			log.Printf("[SPI RX] FRAME ERROR: %v", frameErr)
 		}
-		log.Printf("[SPI RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d, Reserved: %d",
-			state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower, state.Recvdata.Reserved)
-		log.Printf("[SPI RX] raw (%dB): % x", SPIFrameSize, rx)
+		log.Printf("[SPI RX] Raw: % 02X", rx[:SPIRecvSize])
+		log.Printf("[SPI RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
+			state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower)
+		log.Printf("[SPI RX] Wheel(raw) FL: %d, BL: %d, BR: %d, FR: %d",
+			state.Recvdata.FlWheelSpeed, state.Recvdata.BlWheelSpeed, state.Recvdata.BrWheelSpeed, state.Recvdata.FrWheelSpeed)
+		log.Printf("[SPI RX] Wheel(rad/s) FL: %.2f, BL: %.2f, BR: %.2f, FR: %.2f",
+			state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
+		log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
 		link.LogSendData(tx)
 	}
 
@@ -84,15 +91,21 @@ func processSPICommunication(conn spi.Conn) {
 	prevSPIFrameValid = isSPIFrameValid
 }
 
+func parseRecvBuf(rx []byte) state.RecvData {
+	return state.RecvData{
+		Volt:              rx[0],
+		SensorInformation: rx[1],
+		CapPower:          rx[2],
+		FlWheelSpeed:      int16(rx[3]) | int16(rx[4])<<8,
+		BlWheelSpeed:      int16(rx[5]) | int16(rx[6])<<8,
+		BrWheelSpeed:      int16(rx[7]) | int16(rx[8])<<8,
+		FrWheelSpeed:      int16(rx[9]) | int16(rx[10])<<8,
+	}
+}
+
 func validateRecvFrame(rx []byte) error {
 	if len(rx) < SPIFrameSize {
 		return fmt.Errorf("short frame: got %d bytes, want %d", len(rx), SPIFrameSize)
-	}
-	for i := 0; i < SPIRecvSize; i++ {
-		if rx[i] != SPIExpectedRecvPayload[i] {
-			return fmt.Errorf("payload[%d]: expected %02x, got %02x (want % x, got % x)",
-				i, SPIExpectedRecvPayload[i], rx[i], SPIExpectedRecvPayload, rx[:SPIRecvSize])
-		}
 	}
 	for i := SPIRecvSize; i < SPIFrameSize; i++ {
 		if rx[i] != 0 {

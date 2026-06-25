@@ -35,10 +35,8 @@ const (
 	spiDevPath   = "/dev/spidev4.0"
 	spiSpeedHz   = 1_000_000
 	spiFrameSize = 18
-	spiRecvSize  = 4
+	spiRecvSize  = 11
 )
-
-var spiExpectedRecvPayload = []byte{0x64, 0x78, 0x82, 0x8c}
 
 const (
 	infoDoCharge       = 0b00010000
@@ -61,12 +59,15 @@ type sendFrame struct {
 	Informations  uint8
 }
 
-// recvFrame は本番 RecvStruct と同じ 4 バイト（BigEndian）
+// recvFrame は Pi UART 受信と同じ 11 バイト（フッターなし・リトルエンディアン）
 type recvFrame struct {
 	Volt              uint8
 	SensorInformation uint8
 	CapPower          uint8
-	Reserved          uint8
+	FlWheelSpeed      int16
+	BlWheelSpeed      int16
+	BrWheelSpeed      int16
+	FrWheelSpeed      int16
 }
 
 // velXSweep は VelX を -max → 0 → max → 0 → -max と三角波スイープする
@@ -149,8 +150,7 @@ func main() {
 		log.Fatalf("Connect: %v", err)
 	}
 
-	log.Printf("SPI test start: dev=%s speed=%dHz mode=0 frame=%dB", *dev, *hz, spiFrameSize)
-	log.Printf("Expected RX: % x + %d zero bytes", spiExpectedRecvPayload, spiFrameSize-spiRecvSize)
+	log.Printf("SPI test start: dev=%s speed=%dHz mode=0 frame=%dB recv=%dB", *dev, *hz, spiFrameSize, spiRecvSize)
 	if *sweep {
 		log.Printf("Sweep mode: VelX %d → 0 → %d → 0 → %d (step %d)", -*sweepMax, *sweepMax, -*sweepMax, *sweepStep)
 	}
@@ -248,11 +248,6 @@ func validateRecvFrame(rx []byte) error {
 	if len(rx) < spiFrameSize {
 		return fmt.Errorf("short frame: got %d bytes, want %d", len(rx), spiFrameSize)
 	}
-	for i := 0; i < spiRecvSize; i++ {
-		if rx[i] != spiExpectedRecvPayload[i] {
-			return fmt.Errorf("payload[%d]: expected %02x, got %02x", i, spiExpectedRecvPayload[i], rx[i])
-		}
-	}
 	for i := spiRecvSize; i < spiFrameSize; i++ {
 		if rx[i] != 0 {
 			return fmt.Errorf("padding[%d]: expected 00, got %02x", i, rx[i])
@@ -263,7 +258,7 @@ func validateRecvFrame(rx []byte) error {
 
 func printResult(n int, tx, rx []byte, frameErr error) {
 	var recv recvFrame
-	if err := binary.Read(bytes.NewReader(rx[:spiRecvSize]), binary.BigEndian, &recv); err != nil {
+	if err := binary.Read(bytes.NewReader(rx[:spiRecvSize]), binary.LittleEndian, &recv); err != nil {
 		log.Printf("[%d] RX parse error: %v", n, err)
 		return
 	}
@@ -279,8 +274,9 @@ func printResult(n int, tx, rx []byte, frameErr error) {
 	fmt.Printf("[%d] %s TX vel=(%d,%d,%d) dribble=%d kick=%d chip=%d info=0b%08b\n",
 		n, status, sent.VelX, sent.VelY, sent.VelAng,
 		sent.DribblePower, sent.KickPower, sent.ChipPower, sent.Informations)
-	fmt.Printf("     RX volt=%d (%.1fV) sensor=0b%08b cap=%d reserved=%d\n",
-		recv.Volt, float32(recv.Volt)*0.1, recv.SensorInformation, recv.CapPower, recv.Reserved)
+	fmt.Printf("     RX volt=%d (%.1fV) sensor=0b%08b cap=%d wheels=(%d,%d,%d,%d)\n",
+		recv.Volt, float32(recv.Volt)*0.1, recv.SensorInformation, recv.CapPower,
+		recv.FlWheelSpeed, recv.BlWheelSpeed, recv.BrWheelSpeed, recv.FrWheelSpeed)
 	fmt.Printf("     TX raw (%dB): % x\n", len(tx), tx)
 	fmt.Printf("     RX raw (%dB): % x\n", len(rx), rx)
 	if frameErr != nil {
