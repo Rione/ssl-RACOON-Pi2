@@ -54,10 +54,10 @@ func processSerialCommunication(port serial.Port) {
 
 	state.Recvdata = parseRecvBuf(recvbuf)
 
-	state.FlWheelSpeedRadS = float32(state.Recvdata.FlWheelSpeed) / 100.0
-	state.BlWheelSpeedRadS = float32(state.Recvdata.BlWheelSpeed) / 100.0
-	state.BrWheelSpeedRadS = float32(state.Recvdata.BrWheelSpeed) / 100.0
-	state.FrWheelSpeedRadS = float32(state.Recvdata.FrWheelSpeed) / 100.0
+	state.FlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FlWheelSpeed)
+	state.BlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BlWheelSpeed)
+	state.BrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BrWheelSpeed)
+	state.FrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FrWheelSpeed)
 
 	if state.DebugSerial {
 		log.Printf("[Serial RX] Raw: % 02X", recvbuf)
@@ -65,7 +65,7 @@ func processSerialCommunication(port serial.Port) {
 			state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower, state.Recvdata.Footer)
 		log.Printf("[Serial RX] Wheel(raw) FL: %d, BL: %d, BR: %d, FR: %d",
 			state.Recvdata.FlWheelSpeed, state.Recvdata.BlWheelSpeed, state.Recvdata.BrWheelSpeed, state.Recvdata.FrWheelSpeed)
-		log.Printf("[Serial RX] Wheel(rad/s) FL: %.2f, BL: %.2f, BR: %.2f, FR: %.2f",
+		log.Printf("[Serial RX] Wheel(m/s) FL: %.3f, BL: %.3f, BR: %.3f, FR: %.3f",
 			state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
 	}
 
@@ -92,6 +92,13 @@ func parseRecvBuf(recvbuf []byte) state.RecvData {
 		FrWheelSpeed:      int16(recvbuf[9]) | int16(recvbuf[10])<<8,
 		Footer:            recvbuf[11],
 	}
+}
+
+func motorRawToWheelMS(raw int16) float32 {
+	motorRadS := float32(raw) / 100.0
+	wheelRadS := motorRadS / MotorGearRatio
+	wheelRadiusM := float32(WheelDiameterMm / 2000.0)
+	return wheelRadS * wheelRadiusM
 }
 
 func waitForPreambleAndReceive(port serial.Port) []byte {
