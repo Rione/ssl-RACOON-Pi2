@@ -13,6 +13,7 @@ import (
 var (
 	isSignalReceived     bool
 	prevIsSignalReceived bool
+	prevEmgStop          bool = true
 )
 
 var (
@@ -45,6 +46,8 @@ func PrepareSendData() []byte {
 	} else {
 		sendbytes[frame.IdxKick] = 0
 	}
+
+	handleEmgStopChange(sendbytes)
 
 	return sendbytes
 }
@@ -123,6 +126,17 @@ func handleReceiveStateChange() {
 	if isSignalReceived && !prevIsSignalReceived {
 		RingBuzzerAsync(10, 500*time.Millisecond, 0)
 	}
+}
+
+func handleEmgStopChange(sendbytes []byte) {
+	emgActive := sendbytes[frame.IdxInfo]&state.InfoEmgStop != 0
+	if prevEmgStop && !emgActive {
+		log.Println("Emergency stop released (InfoEmgStop: 1 -> 0)")
+	}
+	if !prevEmgStop && emgActive {
+		log.Println("Emergency stop activated (InfoEmgStop: 0 -> 1)")
+	}
+	prevEmgStop = emgActive
 }
 
 func LogSendData(sendbytes []byte) {
