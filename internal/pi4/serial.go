@@ -86,10 +86,10 @@ func parseRecvBuf(recvbuf []byte) state.RecvData {
 		Volt:              recvbuf[0],
 		SensorInformation: recvbuf[1],
 		CapPower:          recvbuf[2],
-		FlWheelSpeed:      int16(recvbuf[3]) | int16(recvbuf[4])<<8,
+		FlWheelSpeed:      int16(recvbuf[9]) | int16(recvbuf[10])<<8,
 		BlWheelSpeed:      int16(recvbuf[5]) | int16(recvbuf[6])<<8,
 		BrWheelSpeed:      int16(recvbuf[7]) | int16(recvbuf[8])<<8,
-		FrWheelSpeed:      int16(recvbuf[9]) | int16(recvbuf[10])<<8,
+		FrWheelSpeed:      int16(recvbuf[3]) | int16(recvbuf[4])<<8,
 		Footer:            recvbuf[11],
 	}
 }
