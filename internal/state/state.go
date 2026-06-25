@@ -1,7 +1,6 @@
 package state
 
 import (
-	"bytes"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -52,7 +51,25 @@ func (a *AtomicTime) Since() time.Duration {
 	return time.Duration(time.Now().UnixNano() - a.nano.Load())
 }
 
-var SendArray bytes.Buffer
+var (
+	sendPayloadMu sync.RWMutex
+	sendPayload   []byte
+)
+
+func SetSendPayload(data []byte) {
+	sendPayloadMu.Lock()
+	sendPayload = append([]byte(nil), data...)
+	sendPayloadMu.Unlock()
+}
+
+func GetSendPayload() []byte {
+	sendPayloadMu.RLock()
+	defer sendPayloadMu.RUnlock()
+	if len(sendPayload) == 0 {
+		return nil
+	}
+	return append([]byte(nil), sendPayload...)
+}
 
 type RecvData struct {
 	Volt              uint8

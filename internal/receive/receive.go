@@ -211,10 +211,15 @@ func processCommand(cmd *pb_gen.GrSim_Robot_Command) {
 	}
 	payload.Informations |= state.InfoDoCharge
 
-	state.SendArray = bytes.Buffer{}
-	if err := binary.Write(&state.SendArray, binary.LittleEndian, payload); err != nil {
+	state.SetSendPayload(mustEncodeSendPayload(payload))
+}
+
+func mustEncodeSendPayload(payload state.SendPayload) []byte {
+	var buf bytes.Buffer
+	if err := binary.Write(&buf, binary.LittleEndian, payload); err != nil {
 		log.Fatal(err)
 	}
+	return buf.Bytes()
 }
 
 func ReceiveData(done <-chan struct{}, myID uint32, ip string) {
