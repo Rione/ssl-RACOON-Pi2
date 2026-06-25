@@ -95,8 +95,7 @@ func parseRecvBuf(recvbuf []byte) state.RecvData {
 }
 
 func motorRawToWheelMS(raw int16) float32 {
-	motorRadS := float32(raw) / 100.0
-	wheelRadS := motorRadS / MotorGearRatio
+	wheelRadS := float32(raw) / 100.0
 	wheelRadiusM := float32(WheelDiameterMm / 2000.0)
 	return wheelRadS * wheelRadiusM
 }

@@ -7,7 +7,6 @@ const DefaultHostname = "raspberrypi\n"
 const (
 	Baudrate         = 230400
 	SerialPortName   = "/dev/serial0"
-	MotorGearRatio   = 56.0 / 15.0 // motor : wheel (MotorDriver.hpp)
 	WheelDiameterMm  = 54.0
 	PIN_LED1         = 18
 	PIN_LED2         = 27
