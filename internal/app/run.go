@@ -135,12 +135,24 @@ func getHostname() string {
 }
 
 func getLocalIP() string {
-	netInterfaceAddresses, _ := net.InterfaceAddrs()
-
-	for _, netInterfaceAddress := range netInterfaceAddresses {
-		networkIP, ok := netInterfaceAddress.(*net.IPNet)
-		if ok && !networkIP.IP.IsLoopback() && networkIP.IP.To4() != nil {
-			return networkIP.IP.String()
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "0.0.0.0"
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok || ipNet.IP.IsLoopback() || ipNet.IP.To4() == nil {
+				continue
+			}
+			return ipNet.IP.String()
 		}
 	}
 	return "0.0.0.0"
