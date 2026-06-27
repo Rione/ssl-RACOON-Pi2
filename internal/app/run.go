@@ -137,6 +137,7 @@ func getHostname() string {
 func getLocalIP() string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
+		log.Println("Local IP for AI receive: not found (using 0.0.0.0)")
 		return "0.0.0.0"
 	}
 	for _, iface := range ifaces {
@@ -152,9 +153,12 @@ func getLocalIP() string {
 			if !ok || ipNet.IP.IsLoopback() || ipNet.IP.To4() == nil {
 				continue
 			}
-			return ipNet.IP.String()
+			ip := ipNet.IP.String()
+			log.Printf("Local IP for AI receive: %s (%s)", ip, iface.Name)
+			return ip
 		}
 	}
+	log.Println("Local IP for AI receive: not found (using 0.0.0.0)")
 	return "0.0.0.0"
 }
 
