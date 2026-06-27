@@ -109,6 +109,8 @@ func handleRequest(conn net.Conn) {
 		handleUpdatePython(conn)
 	case "changeadjustment":
 		handleChangeAdjustment(conn, pathParts)
+	case "powershutdown":
+		handlePowerShutdown(conn)
 	default:
 		handleStatus(conn)
 	}
@@ -139,6 +141,14 @@ func handleBuzzer(conn net.Conn, pathParts []string) {
 func handleIgnoreBatteryLow(conn net.Conn) {
 	state.AlarmIgnore = true
 	sendHTTPResponse(conn, 200, "text/plain", "IGNORE BATTERY LOW OK\r\n")
+}
+
+func handlePowerShutdown(conn net.Conn) {
+	if !state.PowerShutdownMode {
+		log.Println("Power shutdown mode requested via API")
+	}
+	state.PowerShutdownMode = true
+	sendHTTPResponse(conn, 200, "text/plain", "POWER SHUTDOWN OK\r\n")
 }
 
 func handleImage(conn net.Conn) {

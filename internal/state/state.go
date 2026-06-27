@@ -32,6 +32,8 @@ const (
 	InfoDoCharge       = 0b00010000
 	InfoSignalReceived = 0b00100000
 	InfoCtrlByRobot    = 0b01000000
+
+	PowerCmdShutdown = 0x99
 )
 
 const (
@@ -164,6 +166,8 @@ var (
 	DebugReceive bool = false
 	DryRun       bool = false
 	VelX1000     bool = false
+
+	PowerShutdownMode bool = false
 )
 
 type Adjustment struct {

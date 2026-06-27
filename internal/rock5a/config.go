@@ -7,7 +7,7 @@ const DefaultHostname = "DietPi\n"
 const (
 	SPIDevPath        = "/dev/spidev4.0"
 	SPISpeedHz        = 1_000_000
-	SPIFrameSize      = 18
+	SPIFrameSize      = 19
 	SPIRecvSize       = 11
 	SPIPeriodMs       = 8
 	WheelDiameterMm   = 60.0

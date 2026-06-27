@@ -34,7 +34,7 @@ import (
 const (
 	spiDevPath   = "/dev/spidev4.0"
 	spiSpeedHz   = 1_000_000
-	spiFrameSize = 18
+	spiFrameSize = 19
 	spiRecvSize  = 11
 )
 
@@ -128,6 +128,7 @@ func main() {
 	sweepMax := flag.Int("sweep-max", 1000, "スイープ時のVelX最大絶対値 [mm/s]")
 	sweepStep := flag.Int("sweep-step", 100, "スイープ時のVelX刻み幅 [mm/s]")
 	mismatchOnly := flag.Bool("mismatch-only", false, "受信フレームずれ(NG)時のみ詳細を表示")
+	shutdown := flag.Bool("shutdown", false, "19バイト目に0x99（電源強制シャットダウン）を載せる")
 
 	flag.Parse()
 
@@ -184,7 +185,7 @@ func main() {
 			velXNow = sweeper.next()
 		}
 
-		tx := buildFrame(velXNow, *velY, *velAng, *dribble, *kick, *chip, *camX, *camY, *charge)
+		tx := buildFrame(velXNow, *velY, *velAng, *dribble, *kick, *chip, *camX, *camY, *charge, *shutdown)
 		rx := make([]byte, spiFrameSize)
 		txCopy := append([]byte(nil), tx...)
 		if err := conn.Tx(tx, rx); err != nil {
@@ -219,7 +220,7 @@ func main() {
 	}
 }
 
-func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge bool) []byte {
+func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge, shutdown bool) []byte {
 	info := uint8(infoSignalReceived)
 	if charge {
 		info |= infoDoCharge
@@ -241,7 +242,13 @@ func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge 
 	if err := binary.Write(buf, binary.LittleEndian, frame); err != nil {
 		log.Fatalf("binary.Write: %v", err)
 	}
-	return buf.Bytes()
+	tx := buf.Bytes()
+	if shutdown {
+		tx = append(tx, 0x99)
+	} else {
+		tx = append(tx, 0x00)
+	}
+	return tx
 }
 
 func validateRecvFrame(rx []byte) error {

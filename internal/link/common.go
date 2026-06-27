@@ -14,6 +14,7 @@ var (
 	isSignalReceived     bool
 	prevIsSignalReceived bool
 	prevEmgStop          bool = true
+	prevPowerShutdown    bool
 )
 
 var (
@@ -60,10 +61,23 @@ func PrepareSendData() []byte {
 // PrepareHardwareTx returns the frame actually sent on serial/SPI.
 // In dry-run mode, motion fields (VelX/Y/Ang, dribble, kick, chip) are zeroed.
 func PrepareHardwareTx(sendbytes []byte) []byte {
-	if !state.DryRun {
-		return sendbytes
-	}
 	out := append([]byte(nil), sendbytes...)
+	if frame.IdxPowerCmd >= 0 {
+		if len(out) <= frame.IdxPowerCmd {
+			extended := make([]byte, frame.IdxPowerCmd+1)
+			copy(extended, out)
+			out = extended
+		}
+		if state.PowerShutdownMode {
+			out[frame.IdxPowerCmd] = state.PowerCmdShutdown
+		} else {
+			out[frame.IdxPowerCmd] = 0x00
+		}
+	}
+	handlePowerShutdownChange()
+	if !state.DryRun {
+		return out
+	}
 	for i := frame.IdxVelXLow; i <= frame.IdxChip; i++ {
 		out[i] = 0
 	}
@@ -155,6 +169,13 @@ func handleEmgStopChange(sendbytes []byte) {
 		log.Println("Emergency stop activated (InfoEmgStop: 0 -> 1)")
 	}
 	prevEmgStop = emgActive
+}
+
+func handlePowerShutdownChange() {
+	if !prevPowerShutdown && state.PowerShutdownMode {
+		log.Printf("Power shutdown command activated (byte[%d]: 0x%02x)", frame.IdxPowerCmd, state.PowerCmdShutdown)
+	}
+	prevPowerShutdown = state.PowerShutdownMode
 }
 
 func LogSendData(sendbytes []byte) {

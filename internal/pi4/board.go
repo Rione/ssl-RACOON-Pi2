@@ -20,6 +20,7 @@ func RegisterLink() {
 		IdxCamBallX:   16,
 		IdxCamBallY:   17,
 		IdxInfo:       18,
+		IdxPowerCmd:   -1,
 		EnsureSendFrame: ensureSendFrame,
 	})
 	link.SetRingBuzzer(RingBuzzer)

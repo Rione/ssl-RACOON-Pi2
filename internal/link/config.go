@@ -6,6 +6,7 @@ type FrameConfig struct {
 	IdxVelAngLow, IdxVelAngHigh int
 	IdxDribble, IdxKick, IdxChip int
 	IdxCamBallX, IdxCamBallY, IdxInfo int
+	IdxPowerCmd int
 	EnsureSendFrame func() []byte
 }
 
