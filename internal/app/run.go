@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Rione/ssl-RACOON-Pi2/internal/api"
@@ -141,7 +143,7 @@ func getLocalIP() string {
 		return "0.0.0.0"
 	}
 	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+		if !interfaceLinkUp(iface) {
 			continue
 		}
 		addrs, err := iface.Addrs()
@@ -160,6 +162,19 @@ func getLocalIP() string {
 	}
 	log.Println("Local IP for AI receive: not found (using 0.0.0.0)")
 	return "0.0.0.0"
+}
+
+// interfaceLinkUp reports whether the interface has an active link (not merely admin-up).
+// On Linux, eth0 can stay FlagUp with NO-CARRIER; operstate stays "down" until carrier is present.
+func interfaceLinkUp(iface net.Interface) bool {
+	if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join("/sys/class/net", iface.Name, "operstate"))
+	if err != nil {
+		return iface.Flags&net.FlagRunning != 0
+	}
+	return strings.TrimSpace(string(data)) == "up"
 }
 
 func setupSignalHandler() {
