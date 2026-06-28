@@ -166,7 +166,7 @@ sudo raspi-config
 
 ## Rock5A（SPI）
 
-Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz, Mode0）です。送受信フレーム長は **18 バイト**（有効ペイロード 11 バイト + パディング 7 バイト）です。
+Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz, Mode0）です。送受信フレーム長は **20 バイト**（ヘッダ `0xFF` + ペイロード 18 バイト + フッタ `0xAA`）。受信ペイロードの先頭 11 バイトが有効データで、続く 7 バイトはパディング（`0x00`）です。ヘッダ・フッタ・パディングが不正なフレームは破棄されます。
 
 ### PIN ASSIGN / ピン配置
 
@@ -189,7 +189,7 @@ Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz,
 
 ```bash
 sudo /root/spi_test -interval 8ms          # 本番と同じ 125Hz（SignalReceived のみ、EmgStop=0）
-sudo /root/spi_test -once                  # 1 回送信（TX 18 バイト）
+sudo /root/spi_test -once                  # 1 回送信（TX 20 バイト）
 sudo /root/spi_test -interval 8ms -velx 500 -charge   # 走行テスト（DoCharge も付与）
 sudo /root/spi_test -emgstop               # 起動直後 idle 相当（EmgStop=1、走行不可）
 sudo /root/spi_test -interval 8ms -mismatch-only   # NG のみ表示

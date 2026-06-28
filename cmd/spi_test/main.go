@@ -2,8 +2,9 @@
 
 // SPI送受信テスト用ツール（Rock5A Master → ロボットMCU Slave）
 //
-// 本番 racoon-pi2-rock5a と同じ 18 バイト TX / 11+7 バイト RX レイアウト。
-// （旧 19 バイト目 PowerCmd は廃止済み）
+// 本番 racoon-pi2-rock5a と同じ 20 バイト TX/RX レイアウト。
+// ヘッダ 0xFF + 18 バイトペイロード + フッタ 0xAA。
+// RX は先頭 11 バイトが有効データ、続く 7 バイトはパディング（0x00）。
 //
 // ビルド:
 //
@@ -38,10 +39,13 @@ import (
 )
 
 const (
-	spiDevPath   = "/dev/spidev4.0"
-	spiSpeedHz   = 1_000_000
-	spiFrameSize = 18
-	spiRecvSize  = 11
+	spiDevPath     = "/dev/spidev4.0"
+	spiSpeedHz     = 1_000_000
+	spiFrameSize   = 20
+	spiPayloadSize = 18
+	spiRecvSize    = 11
+	spiFrameHeader = 0xFF
+	spiFrameFooter = 0xAA
 )
 
 const (
@@ -50,7 +54,7 @@ const (
 	infoSignalReceived = 0b00100000
 )
 
-// sendFrame は本番 SendStruct と同じ 18 バイトレイアウト（LittleEndian）
+// sendFrame は本番 SendStruct と同じ 18 バイトペイロード（LittleEndian）
 type sendFrame struct {
 	VelX          int16
 	VelY          int16
@@ -239,7 +243,7 @@ loop:
 		}
 
 		sent++
-		frameErr := validateRecvFrame(rx)
+		frameErr := validateSPIFrame(rx)
 		stats.record(frameErr)
 		frameOK := frameErr == nil
 		if !frameOK && prevFrameOK {
@@ -295,18 +299,29 @@ func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge,
 	if err := binary.Write(buf, binary.LittleEndian, frame); err != nil {
 		log.Fatalf("binary.Write: %v", err)
 	}
-	tx := buf.Bytes()
-	if len(tx) != spiFrameSize {
-		log.Fatalf("frame size: got %d bytes, want %d", len(tx), spiFrameSize)
+	payload := buf.Bytes()
+	if len(payload) != spiPayloadSize {
+		log.Fatalf("payload size: got %d bytes, want %d", len(payload), spiPayloadSize)
 	}
+
+	tx := make([]byte, spiFrameSize)
+	tx[0] = spiFrameHeader
+	copy(tx[1:], payload)
+	tx[spiFrameSize-1] = spiFrameFooter
 	return tx
 }
 
-func validateRecvFrame(rx []byte) error {
+func validateSPIFrame(rx []byte) error {
 	if len(rx) < spiFrameSize {
 		return fmt.Errorf("short frame: got %d bytes, want %d", len(rx), spiFrameSize)
 	}
-	for i := spiRecvSize; i < spiFrameSize; i++ {
+	if rx[0] != spiFrameHeader {
+		return fmt.Errorf("header: expected %02x, got %02x", spiFrameHeader, rx[0])
+	}
+	if rx[spiFrameSize-1] != spiFrameFooter {
+		return fmt.Errorf("footer: expected %02x, got %02x", spiFrameFooter, rx[spiFrameSize-1])
+	}
+	for i := 1 + spiRecvSize; i < spiFrameSize-1; i++ {
 		if rx[i] != 0 {
 			return fmt.Errorf("padding[%d]: expected 00, got %02x", i, rx[i])
 		}
@@ -316,13 +331,13 @@ func validateRecvFrame(rx []byte) error {
 
 func printResult(n int, tx, rx []byte, frameErr error) {
 	var recv recvFrame
-	if err := binary.Read(bytes.NewReader(rx[:spiRecvSize]), binary.LittleEndian, &recv); err != nil {
+	if err := binary.Read(bytes.NewReader(rx[1:1+spiRecvSize]), binary.LittleEndian, &recv); err != nil {
 		log.Printf("[%d] RX parse error: %v", n, err)
 		return
 	}
 
 	var sent sendFrame
-	_ = binary.Read(bytes.NewReader(tx), binary.LittleEndian, &sent)
+	_ = binary.Read(bytes.NewReader(tx[1:1+spiPayloadSize]), binary.LittleEndian, &sent)
 
 	status := "OK"
 	if frameErr != nil {

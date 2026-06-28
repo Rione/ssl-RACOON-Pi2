@@ -3,7 +3,6 @@
 package rock5a
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -58,41 +57,44 @@ func RunSPI(done <-chan struct{}, myID uint32) {
 
 func processSPICommunication(conn spi.Conn) {
 	sendbytes := link.PrepareSendData()
-	tx := link.PrepareHardwareTx(sendbytes)
-	if len(tx) > SPIFrameSize {
-		tx = tx[:SPIFrameSize]
+	payload := link.PrepareHardwareTx(sendbytes)
+	if len(payload) > SPIPayloadSize {
+		payload = payload[:SPIPayloadSize]
 	}
+	tx := wrapSPIFrame(payload)
 	rx := make([]byte, SPIFrameSize)
 
 	if err := conn.Tx(tx, rx); err != nil {
 		util.CheckError(err)
 	}
 
-	frameErr := validateRecvFrame(rx)
+	frameErr := validateSPIFrame(rx)
 	isSPIFrameValid = frameErr == nil
 	handleSPIFrameValidationChange(frameErr)
 
-	state.Recvdata = parseRecvBuf(rx)
+	if frameErr == nil {
+		state.Recvdata = parseRecvBuf(rx)
 
-	state.FlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FlWheelSpeed)
-	state.BlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BlWheelSpeed)
-	state.BrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BrWheelSpeed)
-	state.FrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FrWheelSpeed)
+		state.FlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FlWheelSpeed)
+		state.BlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BlWheelSpeed)
+		state.BrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BrWheelSpeed)
+		state.FrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FrWheelSpeed)
 
-	if state.DebugWheelGraph {
-		wheelgraph.Record(
-			state.Recvdata.FlWheelSpeed,
-			state.Recvdata.BlWheelSpeed,
-			state.Recvdata.BrWheelSpeed,
-			state.Recvdata.FrWheelSpeed,
-		)
+		if state.DebugWheelGraph {
+			wheelgraph.Record(
+				state.Recvdata.FlWheelSpeed,
+				state.Recvdata.BlWheelSpeed,
+				state.Recvdata.BrWheelSpeed,
+				state.Recvdata.FrWheelSpeed,
+			)
+		}
 	}
 
 	if state.DebugSerial {
 		if frameErr != nil {
 			log.Printf("[SPI RX] FRAME ERROR: %v", frameErr)
 		}
-		log.Printf("[SPI RX] Raw: % 02X", rx[:SPIRecvSize])
+		log.Printf("[SPI RX] Raw: % 02X", rx[1:1+SPIRecvSize])
 		log.Printf("[SPI RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
 			state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower)
 		log.Printf("[SPI RX] Wheel(raw) FL: %d, BL: %d, BR: %d, FR: %d",
@@ -112,14 +114,15 @@ func processSPICommunication(conn spi.Conn) {
 }
 
 func parseRecvBuf(rx []byte) state.RecvData {
+	off := 1
 	return state.RecvData{
-		Volt:              rx[0],
-		SensorInformation: rx[1],
-		CapPower:          rx[2],
-		FlWheelSpeed:      int16(rx[3]) | int16(rx[4])<<8,
-		BlWheelSpeed:      int16(rx[5]) | int16(rx[6])<<8,
-		BrWheelSpeed:      int16(rx[7]) | int16(rx[8])<<8,
-		FrWheelSpeed:      int16(rx[9]) | int16(rx[10])<<8,
+		Volt:              rx[off+0],
+		SensorInformation: rx[off+1],
+		CapPower:          rx[off+2],
+		FlWheelSpeed:      int16(rx[off+3]) | int16(rx[off+4])<<8,
+		BlWheelSpeed:      int16(rx[off+5]) | int16(rx[off+6])<<8,
+		BrWheelSpeed:      int16(rx[off+7]) | int16(rx[off+8])<<8,
+		FrWheelSpeed:      int16(rx[off+9]) | int16(rx[off+10])<<8,
 	}
 }
 
@@ -127,18 +130,6 @@ func motorRawToWheelMS(raw int16) float32 {
 	wheelRadS := float32(raw) / 100.0
 	wheelRadiusM := float32(WheelDiameterMm / 2000.0)
 	return wheelRadS * wheelRadiusM
-}
-
-func validateRecvFrame(rx []byte) error {
-	if len(rx) < SPIFrameSize {
-		return fmt.Errorf("short frame: got %d bytes, want %d", len(rx), SPIFrameSize)
-	}
-	for i := SPIRecvSize; i < SPIFrameSize; i++ {
-		if rx[i] != 0 {
-			return fmt.Errorf("padding[%d]: expected 00, got %02x", i, rx[i])
-		}
-	}
-	return nil
 }
 
 func handleSPIFrameValidationChange(frameErr error) {
