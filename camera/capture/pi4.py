@@ -9,7 +9,6 @@ software (``frame_post.apply_orientation``), not via libcamera Transform,
 which is unreliable across Pi OS / Picamera2 versions.
 """
 
-import cv2
 from picamera2 import Picamera2
 
 from camera import debug
@@ -86,8 +85,9 @@ class Pi4Capture:
         frame = self.cap.capture_array()
         if frame is None:
             return False, None
-        # Picamera2 RGB888 → OpenCV/YOLO/HSV pipeline expects BGR.
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        # Picamera2 labels the stream RGB888, but the numpy buffer is already in
+        # channel order that matches OpenCV BGR on Pi OS / libcamera builds we
+        # target. Do not cvtColor here — RGB2BGR swaps R/B and makes orange look blue.
         frame = postprocess_frame(
             frame,
             self._settings,
