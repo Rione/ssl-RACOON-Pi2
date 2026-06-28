@@ -7,6 +7,8 @@ overhead lighting. Values can be overridden via threshold.json or env vars.
 import os
 import subprocess
 
+from camera import debug
+
 DEFAULT_SUBDEV = "/dev/v4l-subdev2"
 DEFAULT_EXPOSURE = 900
 DEFAULT_GAIN = 80
@@ -50,8 +52,8 @@ def configure_sensor(settings=None):
         text=True,
     )
     if result.returncode != 0:
-        print(f"Warning: failed to set sensor controls on {subdev}: {result.stderr.strip()}")
+        debug.log(f"Warning: failed to set sensor controls on {subdev}: {result.stderr.strip()}")
         return False
 
-    print(f"Sensor configured on {subdev}: {ctrl}")
+    debug.log(f"Sensor configured on {subdev}: {ctrl}")
     return True

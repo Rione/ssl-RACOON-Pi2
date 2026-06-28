@@ -111,6 +111,16 @@ func handleRequest(conn net.Conn) {
 		handleChangeAdjustment(conn, pathParts)
 	case "calibballcolor":
 		handleCalibBallColor(conn)
+	case "color-tuner":
+		handleColorTunerPage(conn)
+	case "colorpreview":
+		handleColorPreview(conn)
+	case "colorthresholds":
+		handleColorThresholds(conn)
+	case "setcolor":
+		handleSetColor(conn, pathParts)
+	case "relaxcolor":
+		handleRelaxColor(conn, pathParts)
 	case "powershutdown":
 		handlePowerShutdown(conn)
 	default:
@@ -315,8 +325,12 @@ func restartPythonProcess() error {
 	log.Printf("Pythonプロセスを開始します（board=%s）。", cameraBoard)
 	cmd := exec.Command("python3", "-m", "camera")
 	cmd.Env = append(os.Environ(), "RACOON_BOARD="+cameraBoard)
+	if state.DebugCamera {
+		cmd.Env = append(cmd.Env, "RACOON_CAMERA_DEBUG=1")
+	}
 	if dir := cameraWorkDir(); dir != "" {
 		cmd.Dir = dir
+		cmd.Env = append(cmd.Env, "PYTHONPATH="+dir)
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -10,6 +10,7 @@ import json
 import socket
 import threading
 
+from camera import debug
 from camera.settings import CALIB_PORT
 
 
@@ -27,16 +28,16 @@ class CalibServer(threading.Thread):
             sock.bind((self._host, self._port))
             sock.listen(1)
         except OSError as e:
-            print(f"[calib] Failed to bind calib server on {self._host}:{self._port}: {e}")
+            debug.log(f"[calib] Failed to bind calib server on {self._host}:{self._port}: {e}")
             return
 
-        print(f"[calib] Calibration server listening on {self._host}:{self._port}")
+        debug.log(f"[calib] Calibration server listening on {self._host}:{self._port}")
 
         while True:
             try:
                 conn, _ = sock.accept()
             except OSError as e:
-                print(f"[calib] accept error: {e}")
+                debug.log(f"[calib] accept error: {e}")
                 continue
 
             with conn:
@@ -46,7 +47,7 @@ class CalibServer(threading.Thread):
         try:
             data = conn.recv(64)
         except OSError as e:
-            print(f"[calib] recv error: {e}")
+            debug.log(f"[calib] recv error: {e}")
             return
 
         request = data.decode("utf-8", errors="ignore").strip()
@@ -57,9 +58,10 @@ class CalibServer(threading.Thread):
         try:
             result = self._calibrate_fn()
         except Exception as e:
-            import traceback
+            if debug.enabled():
+                import traceback
 
-            traceback.print_exc()
+                traceback.print_exc()
             result = {"ok": False, "error": f"calibration failed: {e}"}
 
         self._send(conn, result)
@@ -69,4 +71,4 @@ class CalibServer(threading.Thread):
             payload = json.dumps(result) + "\n"
             conn.sendall(payload.encode("utf-8"))
         except OSError as e:
-            print(f"[calib] send error: {e}")
+            debug.log(f"[calib] send error: {e}")

@@ -247,11 +247,13 @@ func ReceiveData(done <-chan struct{}, myID uint32, ip string) {
 				continue
 			}
 
+			state.ApplyMissingBallCoords(jsonData)
+
 			state.ImageDataPtr = jsonData
 			state.ImageResponseData.Frame = jsonData.Frame
 
 			if jsonData.IsBallExit && !state.PrevBallDetected {
-				if playBallDetectedSound != nil {
+				if state.DebugCamera && playBallDetectedSound != nil {
 					go playBallDetectedSound()
 				}
 			}

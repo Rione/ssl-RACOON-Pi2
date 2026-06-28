@@ -8,6 +8,7 @@ import (
 
 	"github.com/Rione/ssl-RACOON-Pi2/internal/link"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/wheelgraph"
 	"go.bug.st/serial"
 )
 
@@ -58,6 +59,15 @@ func processSerialCommunication(port serial.Port) {
 	state.BlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BlWheelSpeed)
 	state.BrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BrWheelSpeed)
 	state.FrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FrWheelSpeed)
+
+	if state.DebugWheelGraph {
+		wheelgraph.Record(
+			state.Recvdata.FlWheelSpeed,
+			state.Recvdata.BlWheelSpeed,
+			state.Recvdata.BrWheelSpeed,
+			state.Recvdata.FrWheelSpeed,
+		)
+	}
 
 	if state.DebugSerial {
 		log.Printf("[Serial RX] Raw: % 02X", recvbuf)

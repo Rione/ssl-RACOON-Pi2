@@ -14,6 +14,7 @@ import os
 import cv2
 import numpy as np
 
+from camera import debug
 from camera.detect.color import ImageProcessor
 
 _PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,9 +25,9 @@ _MODEL_DIR = os.path.join(_PACKAGE_DIR, "yolo")
 SAMPLE_OFFSET_RATIO = 0.35
 
 # Margins added around the sampled HSV range to tolerate lighting variation.
-H_MARGIN = 5
-S_MARGIN = 30
-V_MARGIN = 30
+H_MARGIN = 7
+S_MARGIN = 35
+V_MARGIN = 35
 
 _model = None
 
@@ -47,16 +48,16 @@ def _load_model():
 
     model_path = _find_model()
     if model_path is None:
-        print(f"[calib] YOLO model not found in {_MODEL_DIR}")
+        debug.log(f"[calib] YOLO model not found in {_MODEL_DIR}")
         return None
 
     try:
         from ultralytics import YOLO
     except ImportError as e:
-        print(f"[calib] ultralytics not installed: {e}")
+        debug.log(f"[calib] ultralytics not installed: {e}")
         return None
 
-    print(f"[calib] Loading YOLO model: {model_path}")
+    debug.log(f"[calib] Loading YOLO model: {model_path}")
     _model = YOLO(model_path)
     return _model
 

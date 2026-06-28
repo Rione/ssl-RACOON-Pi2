@@ -10,6 +10,7 @@ threshold.json (useful for USB cameras at /dev/video0, etc.).
 
 import cv2
 
+from camera import debug
 from camera.sensor import configure_sensor
 
 DEFAULT_DEVICE = 11
@@ -41,7 +42,7 @@ class Rock5aCapture:
         except Exception:
             pass
 
-        print(
+        debug.log(
             f"Rock5A (V4L2) capture started on /dev/video{device}: "
             f"target {width}x{height} @ {fps}fps"
         )
@@ -52,4 +53,4 @@ class Rock5aCapture:
     def release(self):
         if self.cap is not None:
             self.cap.release()
-        print("Rock5A video capture released.")
+        debug.log("Rock5A video capture released.")

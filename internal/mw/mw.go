@@ -187,11 +187,15 @@ func sendStatusToMW(conn *net.UDPConn, targetAddr *net.UDPAddr, myID uint32, adj
 	isNewDribbler := state.Recvdata.SensorInformation&state.SensorNewDribMask != 0
 
 	var isBallExit bool
-	var imageX, imageY float32
+	var imageX, imageY float32 = state.BallCoordMissing, state.BallCoordMissing
 	if state.ImageDataPtr != nil {
 		isBallExit = state.ImageDataPtr.IsBallExit
 		imageX = state.ImageDataPtr.ImageX
 		imageY = state.ImageDataPtr.ImageY
+		if !isBallExit {
+			imageX = state.BallCoordMissing
+			imageY = state.BallCoordMissing
+		}
 	}
 
 	status := createStatus(

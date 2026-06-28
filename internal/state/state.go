@@ -15,6 +15,7 @@ const (
 	UDPRecvPort   = 20011
 	UDPCameraPort = 31133
 	CalibPort     = 31134
+	TunerPort     = 31135
 	MulticastAddr = "224.5.69.4"
 	MulticastPort = "16941"
 	PCRecvPort    = 16941
@@ -146,6 +147,18 @@ var (
 	DoDirectKick     bool  = false
 )
 
+// BallCoordMissing is sent as ball_camera_x/y when no ball is detected.
+const BallCoordMissing float32 = 9999
+
+// ApplyMissingBallCoords sets x/y to BallCoordMissing when no ball is detected.
+func ApplyMissingBallCoords(data *ImageData) {
+	if data == nil || data.IsBallExit {
+		return
+	}
+	data.ImageX = BallCoordMissing
+	data.ImageY = BallCoordMissing
+}
+
 type ImageData struct {
 	IsBallExit bool    `json:"isball"`
 	ImageX     float32 `json:"x"`
@@ -163,8 +176,10 @@ type ImageResponse struct {
 var ImageResponseData ImageResponse
 
 var (
-	DebugSerial  bool = false
-	DebugReceive bool = false
+	DebugSerial      bool = false
+	DebugReceive     bool = false
+	DebugCamera      bool = false
+	DebugWheelGraph  bool = false
 	DryRun       bool = false
 	VelX1000     bool = false
 

@@ -9,6 +9,9 @@ const (
 	SPISpeedHz        = 1_000_000
 	SPIFrameSize      = 19
 	SPIRecvSize       = 11
+	// SPILinkFrameSize is the byte count actually exchanged on SPI (temporary 18).
+	// SPIFrameSize / IdxPowerCmd layout definitions are unchanged.
+	SPILinkFrameSize  = 18
 	SPIPeriodMs       = 8
 	WheelDiameterMm   = 60.0
 )

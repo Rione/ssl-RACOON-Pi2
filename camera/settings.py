@@ -11,10 +11,14 @@ import os
 
 import numpy as np
 
+from camera import debug
+
 # UDP port the camera publishes detection results to (consumed by Go receive).
 UDP_CAMERA_PORT = 31133
 # TCP port the calibration server listens on (driven by Go /calibballcolor).
 CALIB_PORT = 31134
+# TCP port for live threshold preview/tuning (Go /color-tuner UI).
+TUNER_PORT = 31135
 
 CONFIG_FILENAME = "threshold.json"
 
@@ -70,21 +74,18 @@ def load_settings():
     """Loads settings from threshold.json, returning a dict with parsed values."""
     path = config_path()
     settings = {}
+    load_error = None
 
     if os.path.exists(path):
-        print(f"Reading JSON settings file: {path}")
         try:
             with open(path, "r") as f:
                 settings = json.load(f)
-            print("JSON settings loaded successfully.")
         except json.JSONDecodeError as e:
-            print(f"Error decoding JSON from {path}: {e}")
+            load_error = f"Error decoding JSON from {path}: {e}"
             settings = {}
         except Exception as e:
-            print(f"An unexpected error occurred while reading {path}: {e}")
+            load_error = f"An unexpected error occurred while reading {path}: {e}"
             settings = {}
-    else:
-        print(f"Warning: Settings file '{path}' not found. Using default values.")
 
     settings["minThreshold"] = parse_threshold(
         settings.get("minThreshold"), np.array([1, 120, 100], dtype=np.uint8)
@@ -96,6 +97,16 @@ def load_settings():
         settings["ballDetectRadius"] = int(settings["ballDetectRadius"])
     if "circularityThreshold" in settings:
         settings["circularityThreshold"] = float(settings["circularityThreshold"])
+
+    debug.configure(settings)
+    if os.path.exists(path):
+        debug.log(f"Reading JSON settings file: {path}")
+        if load_error is None:
+            debug.log("JSON settings loaded successfully.")
+        else:
+            debug.log(load_error)
+    else:
+        debug.log(f"Warning: Settings file '{path}' not found. Using default values.")
 
     return settings
 

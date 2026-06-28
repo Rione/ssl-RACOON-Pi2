@@ -10,6 +10,10 @@ import json
 
 import cv2
 
+from camera import debug
+
+NO_BALL_COORD = 9999
+
 
 class Encoder:
     @staticmethod
@@ -29,14 +33,14 @@ class Encoder:
         quality=90,
     ):
         if frame is None or frame.size == 0:
-            print("Error: Cannot encode empty frame.")
+            debug.log("Error: Cannot encode empty frame.")
             return None
 
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
         result, encoded_image = cv2.imencode(".jpg", frame, encode_param)
 
         if not result:
-            print("Error: Failed to encode image to JPEG.")
+            debug.log("Error: Failed to encode image to JPEG.")
             return None
 
         frame_bytes_b64 = base64.b64encode(encoded_image.tobytes()).decode("utf-8")
@@ -49,8 +53,8 @@ class Encoder:
             )
             isball = True
         else:
-            x_coord = None
-            y_coord = None
+            x_coord = NO_BALL_COORD
+            y_coord = NO_BALL_COORD
             isball = False
 
         data = {"frame": frame_bytes_b64, "x": x_coord, "y": y_coord, "isball": isball}
@@ -58,5 +62,5 @@ class Encoder:
         try:
             return json.dumps(data)
         except TypeError as e:
-            print(f"Error serializing data to JSON: {e}")
+            debug.log(f"Error serializing data to JSON: {e}")
             return None

@@ -8,6 +8,8 @@ effect without restarting the process.
 import cv2
 import numpy as np
 
+from camera import debug
+
 
 class ImageProcessor:
     def __init__(self, settings=None):
@@ -62,6 +64,9 @@ class BallDetector:
         self._circularityThreshold = float(settings.get("circularityThreshold", 0.2))
         self._minContourArea = float(settings.get("minContourArea", 100))
         self._previousCenter = None
+        self._missCount = 0
+        self._fullFrameSearch = False
+        self._fullFrameAfterMisses = int(settings.get("fullFrameAfterMisses", 3))
 
     def update_settings(self, settings):
         """Hot-reloads thresholds after a calibration run."""
@@ -73,12 +78,28 @@ class BallDetector:
             self._radius = int(settings["ballDetectRadius"])
         if "circularityThreshold" in settings:
             self._circularityThreshold = float(settings["circularityThreshold"])
+        if "fullFrameAfterMisses" in settings:
+            self._fullFrameAfterMisses = int(settings["fullFrameAfterMisses"])
         self._previousCenter = None
+        self._missCount = 0
+        self._fullFrameSearch = False
+
+    def _register_miss(self):
+        self._missCount += 1
+        if self._missCount >= self._fullFrameAfterMisses:
+            self._fullFrameSearch = True
+
+    def _register_hit(self, center):
+        self._missCount = 0
+        self._fullFrameSearch = False
+        self._previousCenter = center
 
     def detect(self, frame):
-        roi, offset, vertices = self._focus(frame, self._previousCenter)
+        search_center = None if self._fullFrameSearch else self._previousCenter
+        roi, offset, vertices = self._focus(frame, search_center)
         if roi.size == 0:
-            print("Warning: ROI is empty.")
+            debug.log("Warning: ROI is empty.")
+            self._register_miss()
             self._previousCenter = None
             return None, None, None, None
 
@@ -90,6 +111,7 @@ class BallDetector:
         ]
 
         if not valid_contours:
+            self._register_miss()
             return None, None, vertices, None
 
         bestContour = max(valid_contours, key=cv2.contourArea)
@@ -100,12 +122,12 @@ class BallDetector:
             circleContour = self._createCircleContour(
                 x + offset[0], y + offset[1], radius
             )
-            self._previousCenter = center
+            self._register_hit(center)
             diameter = int(radius * 2)
             distance = 320 * 40 / diameter if diameter > 0 else None
             return center, circleContour, vertices, distance
 
-        self._previousCenter = None
+        self._register_miss()
         return None, None, vertices, None
 
     def _isCircular(self, contour):
@@ -132,7 +154,7 @@ class BallDetector:
         xMin, yMin, xMax, yMax = int(xMin), int(yMin), int(xMax), int(yMax)
 
         if yMin >= yMax or xMin >= xMax:
-            print(
+            debug.log(
                 f"Warning: Invalid ROI calculated: ({xMin},{yMin}) to ({xMax},{yMax}). Using full frame."
             )
             xMin, yMin, xMax, yMax = 0, 0, width, height
@@ -152,6 +174,39 @@ class BallDetector:
             dtype=np.int32,
         )
         return contour_points.reshape((-1, 1, 2))
+
+    @staticmethod
+    def encode_jpeg_b64(frame, quality=75, max_width=480):
+        import base64
+
+        if frame is None or frame.size == 0:
+            return None
+        h, w = frame.shape[:2]
+        if w > max_width:
+            scale = max_width / w
+            frame = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+        if not ok:
+            return None
+        return base64.b64encode(encoded.tobytes()).decode("utf-8")
+
+    def build_mask_overlay(self, frame, max_width=480):
+        """Returns a BGR frame highlighting pixels matching the current HSV mask."""
+        if frame is None or frame.size == 0:
+            return frame
+        work = frame
+        h, w = work.shape[:2]
+        if w > max_width:
+            scale = max_width / w
+            work = cv2.resize(work, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
+        mask = self.imageProcessor.extractColors(work)
+        overlay = work.copy()
+        detected = mask > 0
+        overlay[detected] = (
+            overlay[detected].astype(np.float32) * 0.4 + np.array([0, 255, 0], dtype=np.float32) * 0.6
+        ).astype(np.uint8)
+        return overlay
 
 
 class Visualizer:

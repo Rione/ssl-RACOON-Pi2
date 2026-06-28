@@ -19,6 +19,7 @@ import (
 	"github.com/Rione/ssl-RACOON-Pi2/internal/receive"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/upgrade"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/wheelgraph"
 )
 
 func kickCheck(done <-chan struct{}) {
@@ -103,12 +104,19 @@ func Run() {
 	go api.Run(done, myID)
 	go receive.ReceiveData(done, myID, ipCamera)
 
+	if state.DebugWheelGraph {
+		wheelgraph.SetEnabled(true)
+		go wheelgraph.RunServer(done)
+	}
+
 	select {}
 }
 
 func parseFlags() {
 	flag.BoolVar(&state.DebugSerial, "ds", false, "ロボットリンク送受信のモニタリングを有効化")
 	flag.BoolVar(&state.DebugReceive, "dr", false, "AIからの受信結果表示を有効化")
+	flag.BoolVar(&state.DebugCamera, "dc", false, "カメラプロセスのデバッグログを有効化")
+	flag.BoolVar(&state.DebugWheelGraph, "dw", false, "Wheel(raw)のリアルタイムグラフを有効化 (http://<robot>:9192/wheel-graph)")
 	flag.BoolVar(&state.DryRun, "dryrun", false, "serial/SPIへ速度・キック等の動作指令を送らない")
 	flag.BoolVar(&state.VelX1000, "velx1000", false, "テスト用: VelX=1000 を送信フレームに設定")
 	flag.Parse()
@@ -118,6 +126,12 @@ func parseFlags() {
 	}
 	if state.DebugReceive {
 		log.Println("Debug Mode: AI receive monitoring enabled (-dr)")
+	}
+	if state.DebugCamera {
+		log.Println("Debug Mode: Camera logging enabled (-dc)")
+	}
+	if state.DebugWheelGraph {
+		log.Println("Debug Mode: Wheel(raw) graph enabled (-dw)")
 	}
 	if state.DryRun {
 		log.Println("Dry-run mode: motion commands are not sent on serial/SPI (-dryrun)")

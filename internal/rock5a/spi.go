@@ -10,6 +10,7 @@ import (
 	"github.com/Rione/ssl-RACOON-Pi2/internal/link"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/util"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/wheelgraph"
 	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
 	"periph.io/x/conn/v3/spi/spireg"
@@ -58,6 +59,9 @@ func RunSPI(done <-chan struct{}, myID uint32) {
 func processSPICommunication(conn spi.Conn) {
 	sendbytes := link.PrepareSendData()
 	tx := link.PrepareHardwareTx(sendbytes)
+	if len(tx) > SPILinkFrameSize {
+		tx = tx[:SPILinkFrameSize]
+	}
 	rx := make([]byte, len(tx))
 
 	if err := conn.Tx(tx, rx); err != nil {
@@ -75,6 +79,15 @@ func processSPICommunication(conn spi.Conn) {
 	state.BrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BrWheelSpeed)
 	state.FrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FrWheelSpeed)
 
+	if state.DebugWheelGraph {
+		wheelgraph.Record(
+			state.Recvdata.FlWheelSpeed,
+			state.Recvdata.BlWheelSpeed,
+			state.Recvdata.BrWheelSpeed,
+			state.Recvdata.FrWheelSpeed,
+		)
+	}
+
 	if state.DebugSerial {
 		if frameErr != nil {
 			log.Printf("[SPI RX] FRAME ERROR: %v", frameErr)
@@ -86,7 +99,7 @@ func processSPICommunication(conn spi.Conn) {
 			state.Recvdata.FlWheelSpeed, state.Recvdata.BlWheelSpeed, state.Recvdata.BrWheelSpeed, state.Recvdata.FrWheelSpeed)
 		log.Printf("[SPI RX] Wheel(m/s) FL: %.3f, BL: %.3f, BR: %.3f, FR: %.3f",
 			state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
-		log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
+		log.Printf("[SPI RX] full (%dB link / %dB frame): % x", SPILinkFrameSize, SPIFrameSize, rx)
 		link.LogSendData(sendbytes)
 		if state.DryRun {
 			link.LogSendData(tx)
@@ -117,10 +130,10 @@ func motorRawToWheelMS(raw int16) float32 {
 }
 
 func validateRecvFrame(rx []byte) error {
-	if len(rx) < SPIFrameSize {
-		return fmt.Errorf("short frame: got %d bytes, want %d", len(rx), SPIFrameSize)
+	if len(rx) < SPILinkFrameSize {
+		return fmt.Errorf("short frame: got %d bytes, want %d", len(rx), SPILinkFrameSize)
 	}
-	for i := SPIRecvSize; i < SPIFrameSize; i++ {
+	for i := SPIRecvSize; i < SPILinkFrameSize; i++ {
 		if rx[i] != 0 {
 			return fmt.Errorf("padding[%d]: expected 00, got %02x", i, rx[i])
 		}

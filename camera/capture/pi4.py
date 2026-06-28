@@ -7,6 +7,8 @@ downstream HSV pipeline (which treats it as BGR, as the original code did).
 
 from picamera2 import Picamera2
 
+from camera import debug
+
 
 class Pi4Capture:
     def __init__(self, settings=None):
@@ -20,11 +22,11 @@ class Pi4Capture:
 
         self._width = int(settings.get("frameWidth", 640))
         self._height = int(settings.get("frameHeight", 480))
-        print(f"Pi4 (Picamera2) capture started: target {self._width}x{self._height}")
+        debug.log(f"Pi4 (Picamera2) capture started: target {self._width}x{self._height}")
 
     def read(self):
         return (True, self.cap.capture_array())
 
     def release(self):
         self.cap.close()
-        print("Pi4 video capture released.")
+        debug.log("Pi4 video capture released.")
