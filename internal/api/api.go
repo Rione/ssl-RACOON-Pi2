@@ -18,9 +18,13 @@ import (
 	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
 )
 
-var pythonCmd *exec.Cmd
+var (
+	pythonCmd   *exec.Cmd
+	robotID     uint32
+)
 
 func Run(done <-chan struct{}, myID uint32) {
+	robotID = myID
 	if err := restartPythonProcess(); err != nil {
 		log.Printf("Pythonプロセス開始エラー（プログラムは継続します）: %v", err)
 	}
@@ -277,22 +281,116 @@ func requestCalibration() ([]byte, bool, error) {
 	return data, parsed.OK, nil
 }
 
-func handleStatus(conn net.Conn) {
+type statusBallResponse struct {
+	Detected bool    `json:"detected"`
+	CameraX  float32 `json:"cameraX"`
+	CameraY  float32 `json:"cameraY"`
+}
+
+type statusWheelSpeedMS struct {
+	FL float32 `json:"fl"`
+	BL float32 `json:"bl"`
+	BR float32 `json:"br"`
+	FR float32 `json:"fr"`
+}
+
+type statusWheelSpeedRaw struct {
+	FL int16 `json:"fl"`
+	BL int16 `json:"bl"`
+	BR int16 `json:"br"`
+	FR int16 `json:"fr"`
+}
+
+type statusResponse struct {
+	RobotID                 uint32              `json:"robotId"`
+	ConnectionState         string              `json:"connectionState"`
+	IsNewRobot              bool                `json:"isNewRobot"`
+	Volt                    float32             `json:"VOLT"`
+	IsDetectPhotoSensor     bool                `json:"ISDETECTPHOTOSENSOR"`
+	IsDetectDribblerSensor  bool                `json:"ISDETECTDRIBBLERSENSOR"`
+	IsNewDribbler           bool                `json:"ISNEWDRIBBLER"`
+	CapPower                uint8               `json:"capPower"`
+	WheelSpeedMS            statusWheelSpeedMS  `json:"wheelSpeedMS"`
+	WheelSpeedRaw           statusWheelSpeedRaw `json:"wheelSpeedRaw"`
+	Ball                    statusBallResponse  `json:"ball"`
+	Thresholds              state.Adjustment    `json:"thresholds"`
+	Error                   bool                `json:"ERROR"`
+	ErrorCode               int                 `json:"ERRORCODE"`
+	ErrorMessage            string              `json:"ERRORMESSAGE"`
+}
+
+func connectionStateName(s int) string {
+	switch s {
+	case state.StateOffered:
+		return "offered"
+	case state.StateConnected:
+		return "connected"
+	default:
+		return "discovering"
+	}
+}
+
+func buildStatusResponse() statusResponse {
 	detectPhotoSensor := state.Recvdata.SensorInformation&state.SensorPhotoMask != 0
 	detectDribblerSensor := state.Recvdata.SensorInformation&state.SensorDribblerMask != 0
 	isNewDribbler := state.Recvdata.SensorInformation&state.SensorNewDribMask != 0
 
-	response := fmt.Sprintf(`{
-		"VOLT": %f,
-		"ISDETECTPHOTOSENSOR": %t,
-		"ISDETECTDRIBBLERSENSOR": %t,
-		"ISNEWDRIBBLER": %t,
-		"ERROR": %t,
-		"ERRORCODE": %d,
-		"ERRORMESSAGE": "%s"
-	}`, float32(state.Recvdata.Volt)/10.0, detectPhotoSensor, detectDribblerSensor, isNewDribbler, state.IsRobotError, state.RobotErrorCode, state.RobotErrorMessage)
+	var isBallDetected bool
+	var imageX, imageY float32 = state.BallCoordMissing, state.BallCoordMissing
+	if state.ImageDataPtr != nil {
+		isBallDetected = state.ImageDataPtr.IsBallExit
+		imageX = state.ImageDataPtr.ImageX
+		imageY = state.ImageDataPtr.ImageY
+		if !isBallDetected {
+			imageX = state.BallCoordMissing
+			imageY = state.BallCoordMissing
+		}
+	}
 
-	sendHTTPResponse(conn, 200, "application/json", response)
+	state.StateMu.Lock()
+	connState := state.ConnectionState
+	state.StateMu.Unlock()
+
+	return statusResponse{
+		RobotID:                robotID,
+		ConnectionState:        connectionStateName(connState),
+		IsNewRobot:             state.IsNewRobot,
+		Volt:                   float32(state.Recvdata.Volt) / 10.0,
+		IsDetectPhotoSensor:    detectPhotoSensor,
+		IsDetectDribblerSensor: detectDribblerSensor,
+		IsNewDribbler:          isNewDribbler,
+		CapPower:               state.Recvdata.CapPower,
+		WheelSpeedMS: statusWheelSpeedMS{
+			FL: state.FlWheelSpeedRadS,
+			BL: state.BlWheelSpeedRadS,
+			BR: state.BrWheelSpeedRadS,
+			FR: state.FrWheelSpeedRadS,
+		},
+		WheelSpeedRaw: statusWheelSpeedRaw{
+			FL: state.Recvdata.FlWheelSpeed,
+			BL: state.Recvdata.BlWheelSpeed,
+			BR: state.Recvdata.BrWheelSpeed,
+			FR: state.Recvdata.FrWheelSpeed,
+		},
+		Ball: statusBallResponse{
+			Detected: isBallDetected,
+			CameraX:  imageX,
+			CameraY:  imageY,
+		},
+		Thresholds:   mw.GetAdjustment(),
+		Error:        state.IsRobotError,
+		ErrorCode:    state.RobotErrorCode,
+		ErrorMessage: state.RobotErrorMessage,
+	}
+}
+
+func handleStatus(conn net.Conn) {
+	response, err := json.Marshal(buildStatusResponse())
+	if err != nil {
+		sendErrorResponse(conn, 500)
+		return
+	}
+	sendHTTPResponse(conn, 200, "application/json", string(response))
 }
 
 const (
