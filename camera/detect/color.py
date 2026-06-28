@@ -26,7 +26,33 @@ class ImageProcessor:
         self._sigmaX = settings.get("gaussianSigmaX", 0)
         self._shape = cv2.MORPH_RECT
         self._size = tuple(settings.get("morphKernelSize", (3, 3)))
-        self._operation = cv2.MORPH_OPEN
+        # Closing bridges the gaps that printed text/logos punch into the ball
+        # mask so the silhouette stays a single connected blob. Larger than the
+        # opening kernel because it has to span the stroke width of the text.
+        self._closeSize = self._normalize_kernel(
+            settings.get("morphCloseKernelSize", (9, 9))
+        )
+        # After closing, any holes fully enclosed by the ball (e.g. dark numbers
+        # in the middle) are filled so the blob is solid. Cheap on the small ROI.
+        self._fillHoles = bool(settings.get("fillHoles", True))
+        self._open_kernel = cv2.getStructuringElement(self._shape, self._size)
+        self._close_kernel = (
+            cv2.getStructuringElement(self._shape, self._closeSize)
+            if self._closeSize
+            else None
+        )
+
+    @staticmethod
+    def _normalize_kernel(value):
+        """Returns a (w, h) kernel tuple, or None to disable the step."""
+        if value is None:
+            return None
+        if isinstance(value, int):
+            value = (value, value)
+        size = tuple(int(v) for v in value)
+        if len(size) != 2 or size[0] <= 1 or size[1] <= 1:
+            return None
+        return size
 
     def update_thresholds(self, min_threshold, max_threshold):
         self._minThreshold = min_threshold
@@ -50,8 +76,29 @@ class ImageProcessor:
         return cv2.merge((h, s, v_equalized))
 
     def _applyMorphologicalTransformations(self, mask):
-        kernel = cv2.getStructuringElement(self._shape, self._size)
-        return cv2.morphologyEx(mask, self._operation, kernel)
+        # Open first to drop speckle noise, then close to seal text-induced gaps.
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._open_kernel)
+        if self._close_kernel is not None:
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self._close_kernel)
+        if self._fillHoles:
+            mask = self._fill_internal_holes(mask)
+        return mask
+
+    @staticmethod
+    def _fill_internal_holes(mask):
+        """Fills holes fully enclosed by a blob without merging separate blobs.
+
+        Uses the external contours (which already ignore interior holes) and
+        redraws them filled. One findContours + draw pass, so it stays cheap on
+        the ball-sized ROI while making the silhouette solid for a stable
+        minEnclosingCircle fit and a clean mask preview.
+        """
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            cv2.drawContours(mask, contours, -1, 255, thickness=cv2.FILLED)
+        return mask
 
 
 class BallDetector:

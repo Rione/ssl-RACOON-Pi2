@@ -3,7 +3,9 @@
 package upgrade
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log"
@@ -153,9 +155,24 @@ func applyRelease(rel *selfupdate.Release, targetPath string) error {
 		return err
 	}
 
+	if err := applyBinary(data, rel.AssetURL, targetPath); err != nil {
+		return err
+	}
+
+	// The binary is already updated; treat camera/model extraction as
+	// best-effort so a packaging issue cannot leave us with a half-applied
+	// update that refuses to start.
+	destDir := filepath.Dir(targetPath)
+	if err := extractCameraFiles(data, destDir); err != nil {
+		log.Printf("Self-update: binary updated but camera/model extraction failed: %v", err)
+	}
+	return nil
+}
+
+func applyBinary(data []byte, assetURL, targetPath string) error {
 	var lastErr error
 	for _, name := range archiveBinaryNames(targetPath) {
-		asset, err := selfupdate.UncompressCommand(bytes.NewReader(data), rel.AssetURL, name)
+		asset, err := selfupdate.UncompressCommand(bytes.NewReader(data), assetURL, name)
 		if err != nil {
 			lastErr = err
 			continue
@@ -170,4 +187,80 @@ func applyRelease(rel *selfupdate.Release, targetPath string) error {
 		return lastErr
 	}
 	return fmt.Errorf("no archive binary name candidates for %s", targetPath)
+}
+
+// extractCameraFiles extracts the camera/ tree (Python sources and YOLO models)
+// from the release tarball into destDir, so self-update keeps the camera package
+// and models in sync with the binary. Non-camera entries (binary, README,
+// LICENSE) are ignored.
+func extractCameraFiles(data []byte, destDir string) error {
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("open gzip: %w", err)
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	var count int
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("read tar: %w", err)
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+
+		rel := filepath.Clean(hdr.Name)
+		if !underCameraDir(rel) {
+			continue
+		}
+
+		outPath := filepath.Join(destDir, rel)
+		// Guard against path traversal from a malformed archive.
+		if !strings.HasPrefix(outPath, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			log.Printf("Self-update: skipping suspicious archive path %q", hdr.Name)
+			continue
+		}
+		if err := writeFileAtomic(outPath, tr, os.FileMode(hdr.Mode)); err != nil {
+			return fmt.Errorf("write %s: %w", rel, err)
+		}
+		count++
+	}
+
+	log.Printf("Self-update: refreshed %d camera/model file(s) under %s", count, destDir)
+	return nil
+}
+
+func underCameraDir(rel string) bool {
+	return rel == "camera" || strings.HasPrefix(rel, "camera"+string(os.PathSeparator))
+}
+
+func writeFileAtomic(outPath string, r io.Reader, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(outPath), ".racoon-update-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+
+	if _, err := io.Copy(tmp, r); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if mode != 0 {
+		if err := os.Chmod(tmpName, mode); err != nil {
+			return err
+		}
+	}
+	return os.Rename(tmpName, outPath)
 }

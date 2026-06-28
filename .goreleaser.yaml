@@ -1,4 +1,9 @@
 version: 2
+before:
+  hooks:
+    # The YOLO models live in the public ssl-YOLO-Detection submodule; fetch
+    # them so the archives below can bundle camera/yolo/*.pt.
+    - git submodule update --init --recursive
 builds:
   - id: racoon-pi4
     main: ./cmd/racoon-pi2
@@ -29,7 +34,14 @@ archives:
     ids:
       - racoon-pi4
     name_template: "racoon-pi2-pi4_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: &camera_files
+      - src: camera/*.py
+      - src: camera/**/*.py
+      - src: camera/requirements.txt
+      - src: camera/yolo/last.pt
+      - src: camera/yolo/best.pt
   - id: rock5a
     ids:
       - racoon-rock5a
     name_template: "racoon-pi2-rock5a_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: *camera_files
