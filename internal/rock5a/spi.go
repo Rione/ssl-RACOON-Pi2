@@ -3,6 +3,7 @@
 package rock5a
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 var (
 	isSPIFrameValid   bool = true
 	prevSPIFrameValid bool = true
+	spiRxWindow       [SPIFrameSize * 2]byte
 )
 
 func RunSPI(done <-chan struct{}, myID uint32) {
@@ -68,12 +70,13 @@ func processSPICommunication(conn spi.Conn) {
 		util.CheckError(err)
 	}
 
-	frameErr := validateSPIFrame(rx)
+	pushSPIRxWindow(spiRxWindow[:], rx)
+	frameOffset, frameErr := resolveSPIRxFrame(spiRxWindow[:])
 	isSPIFrameValid = frameErr == nil
 	handleSPIFrameValidationChange(frameErr)
 
 	if frameErr == nil {
-		state.Recvdata = parseRecvBuf(rx)
+		state.Recvdata = parseRecvBufAt(spiRxWindow[:], frameOffset)
 
 		state.FlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FlWheelSpeed)
 		state.BlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BlWheelSpeed)
@@ -116,8 +119,16 @@ func processSPICommunication(conn spi.Conn) {
 	prevSPIFrameValid = isSPIFrameValid
 }
 
-func parseRecvBuf(rx []byte) state.RecvData {
-	off := 1
+func resolveSPIRxFrame(window []byte) (offset int, err error) {
+	offset = findSPIFrame(window)
+	if offset < 0 {
+		return 0, fmt.Errorf("no valid frame in %d-byte window", len(window))
+	}
+	return offset, nil
+}
+
+func parseRecvBufAt(rx []byte, frameOffset int) state.RecvData {
+	off := frameOffset + 1
 	return state.RecvData{
 		Volt:              rx[off+0],
 		SensorInformation: rx[off+1],
