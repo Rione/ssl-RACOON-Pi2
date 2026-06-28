@@ -37,6 +37,8 @@ SENSOR_PROFILES = {
         "default_exposure": 900,
         "default_gain": 80,
         "default_flip180": False,
+        # Pi 4 / libcamera: 1296x972 is binned full field of view.
+        "default_capture_size": (1296, 972),
     },
     "imx219": {
         "gain_ctrl": "gain",
@@ -50,6 +52,9 @@ SENSOR_PROFILES = {
         "color_gains": (1.15, 0.78, 1.12),
         # RACOON mount: IMX219 module is upside-down; OV5647 is not.
         "default_flip180": True,
+        # Pi 4 / libcamera: 1640x1232 is 2x2-binned full field of view.
+        # 640x480 uses a centre window and crops heavily.
+        "default_capture_size": (1640, 1232),
     },
 }
 

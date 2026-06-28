@@ -160,10 +160,12 @@ func ApplyMissingBallCoords(data *ImageData) {
 }
 
 type ImageData struct {
-	IsBallExit bool    `json:"isball"`
-	ImageX     float32 `json:"x"`
-	ImageY     float32 `json:"y"`
-	Frame      string  `json:"frame"`
+	IsBallExit  bool    `json:"isball"`
+	ImageX      float32 `json:"x"`
+	ImageY      float32 `json:"y"`
+	Frame       string  `json:"frame"`
+	FrameWidth  int     `json:"frameWidth"`
+	FrameHeight int     `json:"frameHeight"`
 }
 
 var ImageDataPtr *ImageData

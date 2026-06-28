@@ -45,9 +45,10 @@ class Encoder:
 
         frame_bytes_b64 = base64.b64encode(encoded_image.tobytes()).decode("utf-8")
 
+        if frame_width is None or frame_height is None:
+            frame_height, frame_width = frame.shape[:2]
+
         if center is not None:
-            if frame_width is None or frame_height is None:
-                frame_height, frame_width = frame.shape[:2]
             x_coord, y_coord = Encoder.pixel_to_graph(
                 center[0], center[1], frame_width, frame_height
             )
@@ -57,7 +58,14 @@ class Encoder:
             y_coord = NO_BALL_COORD
             isball = False
 
-        data = {"frame": frame_bytes_b64, "x": x_coord, "y": y_coord, "isball": isball}
+        data = {
+            "frame": frame_bytes_b64,
+            "x": x_coord,
+            "y": y_coord,
+            "isball": isball,
+            "frameWidth": int(frame_width),
+            "frameHeight": int(frame_height),
+        }
 
         try:
             return json.dumps(data)

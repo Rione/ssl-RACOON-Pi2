@@ -93,18 +93,21 @@ func processSPICommunication(conn spi.Conn) {
 	if state.DebugSerial {
 		if frameErr != nil {
 			log.Printf("[SPI RX] FRAME ERROR: %v", frameErr)
+			log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
+		} else {
+			log.Printf("[SPI RX] Raw: % 02X", rx[1:1+SPIRecvSize])
+			log.Printf("[SPI RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
+				state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower)
+			log.Printf("[SPI RX] Wheel(raw) FL: %d, BL: %d, BR: %d, FR: %d",
+				state.Recvdata.FlWheelSpeed, state.Recvdata.BlWheelSpeed, state.Recvdata.BrWheelSpeed, state.Recvdata.FrWheelSpeed)
+			log.Printf("[SPI RX] Wheel(m/s) FL: %.3f, BL: %.3f, BR: %.3f, FR: %.3f",
+				state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
+			log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
 		}
-		log.Printf("[SPI RX] Raw: % 02X", rx[1:1+SPIRecvSize])
-		log.Printf("[SPI RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
-			state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower)
-		log.Printf("[SPI RX] Wheel(raw) FL: %d, BL: %d, BR: %d, FR: %d",
-			state.Recvdata.FlWheelSpeed, state.Recvdata.BlWheelSpeed, state.Recvdata.BrWheelSpeed, state.Recvdata.FrWheelSpeed)
-		log.Printf("[SPI RX] Wheel(m/s) FL: %.3f, BL: %.3f, BR: %.3f, FR: %.3f",
-			state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
-		log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
-		link.LogSendData(tx)
+		log.Printf("[SPI TX] full (%dB): % x", SPIFrameSize, tx)
+		link.LogSendData(sendbytes)
 		if state.DryRun {
-			link.LogSendData(tx)
+			link.LogSendData(payload)
 		}
 	}
 

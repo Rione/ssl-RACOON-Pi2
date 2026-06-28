@@ -17,11 +17,23 @@ var (
 	prevPowerShutdown    bool
 )
 
-// Default capture resolution halves (640x480). Used to map graph coords to SPI bytes.
+// Default capture resolution halves (640x480 legacy fallback for SPI byte mapping).
 const (
 	cameraFrameHalfWidth  = 320
 	cameraFrameHalfHeight = 240
 )
+
+func cameraFrameHalfSizes() (halfW, halfH int) {
+	halfW = cameraFrameHalfWidth
+	halfH = cameraFrameHalfHeight
+	if state.ImageDataPtr == nil {
+		return halfW, halfH
+	}
+	if state.ImageDataPtr.FrameWidth > 0 && state.ImageDataPtr.FrameHeight > 0 {
+		return state.ImageDataPtr.FrameWidth / 2, state.ImageDataPtr.FrameHeight / 2
+	}
+	return halfW, halfH
+}
 
 func scaleCameraCoord(coord float32, halfSize int) int {
 	scaled := 128 + int(coord*127/float32(halfSize))
@@ -115,10 +127,11 @@ func updateCameraCoordinates(sendbytes []byte) {
 		return
 	}
 
-	scaledX := scaleCameraCoord(state.ImageDataPtr.ImageX, cameraFrameHalfWidth)
+	halfW, halfH := cameraFrameHalfSizes()
+	scaledX := scaleCameraCoord(state.ImageDataPtr.ImageX, halfW)
 	sendbytes[frame.IdxCamBallX] = byte(scaledX)
 
-	scaledY := scaleCameraCoord(state.ImageDataPtr.ImageY, cameraFrameHalfHeight)
+	scaledY := scaleCameraCoord(state.ImageDataPtr.ImageY, halfH)
 	sendbytes[frame.IdxCamBallY] = byte(scaledY)
 }
 

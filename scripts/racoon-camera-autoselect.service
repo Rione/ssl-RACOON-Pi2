@@ -1,14 +1,13 @@
 [Unit]
-Description=Rock 5A MIPI camera overlay auto-selection (IMX219/OV5647)
+Description=RACOON MIPI camera overlay auto-selection
 DefaultDependencies=no
 After=local-fs.target
 Before=ssl-racoon.service
-ConditionPathExists=/boot/dietpiEnv.txt
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/sbin/select-rock5a-camera.sh
+ExecStart=/bin/bash -c 'if [ -f /boot/firmware/config.txt ]; then /usr/local/sbin/select-pi4-camera.sh; elif [ -f /boot/dietpiEnv.txt ]; then /usr/local/sbin/select-rock5a-camera.sh; else exit 0; fi'
 StandardOutput=journal
 StandardError=journal
 

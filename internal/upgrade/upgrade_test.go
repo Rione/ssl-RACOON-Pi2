@@ -7,6 +7,24 @@ import (
 	"testing"
 )
 
+func TestSkipCameraExtract(t *testing.T) {
+	if skipCameraExtract("camera/foo.py", "/tmp/unused") {
+		t.Fatal("python files should not be skipped")
+	}
+	if skipCameraExtract("camera/yolo/last.pt", "/nonexistent/path/last.pt") {
+		t.Fatal("missing model should be extracted")
+	}
+}
+
+func TestUnderCameraDir(t *testing.T) {
+	if !underCameraDir("camera/main.py") {
+		t.Fatal("expected camera/main.py under camera dir")
+	}
+	if underCameraDir("README.md") {
+		t.Fatal("README should not be under camera dir")
+	}
+}
+
 func TestValidateReleaseBinary(t *testing.T) {
 	validELF := make([]byte, minReleaseBinarySize)
 	validELF[0], validELF[1], validELF[2], validELF[3] = 0x7f, 'E', 'L', 'F'

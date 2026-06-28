@@ -18,6 +18,7 @@
 //	sudo ./spi_test -once -kick 50 -dribble 30
 //	sudo ./spi_test -sweep -interval 16ms   # VelX: -1000→0→1000→0→-1000 を繰り返し
 //	sudo ./spi_test -sweep -mismatch-only   # フレームずれ時のみ表示
+//	sudo ./spi_test -pattern -once           # FF 01 02 ... 12 AA の固定パターン
 //
 // Ctrl+C 終了時に OK/NG パケット数の統計を表示する。
 package main
@@ -171,6 +172,7 @@ func main() {
 	sweepMax := flag.Int("sweep-max", 1000, "スイープ時のVelX最大絶対値 [mm/s]")
 	sweepStep := flag.Int("sweep-step", 100, "スイープ時のVelX刻み幅 [mm/s]")
 	mismatchOnly := flag.Bool("mismatch-only", false, "受信フレームずれ(NG)時のみ詳細を表示")
+	pattern := flag.Bool("pattern", false, "固定テストパターン送信 (255 01 02 ... 18 170 = FF + 1..18 + AA)")
 
 	flag.Parse()
 
@@ -199,6 +201,9 @@ func main() {
 	}
 	if *mismatchOnly {
 		log.Println("Mismatch-only mode: NG frames only")
+	}
+	if *pattern {
+		log.Println("Pattern mode: TX = FF 01 02 03 ... 12 AA (decimal: 255 1..18 170)")
 	}
 
 	sig := make(chan os.Signal, 1)
@@ -230,12 +235,16 @@ loop:
 		default:
 		}
 
-		velXNow := *velX
-		if sweeper != nil {
-			velXNow = sweeper.next()
+		var tx []byte
+		if *pattern {
+			tx = buildPatternFrame()
+		} else {
+			velXNow := *velX
+			if sweeper != nil {
+				velXNow = sweeper.next()
+			}
+			tx = buildFrame(velXNow, *velY, *velAng, *dribble, *kick, *chip, *camX, *camY, *charge, *signalRecv, *emgStop)
 		}
-
-		tx := buildFrame(velXNow, *velY, *velAng, *dribble, *kick, *chip, *camX, *camY, *charge, *signalRecv, *emgStop)
 		rx := make([]byte, spiFrameSize)
 		txCopy := append([]byte(nil), tx...)
 		if err := conn.Tx(tx, rx); err != nil {
@@ -255,7 +264,11 @@ loop:
 		prevFrameOK = frameOK
 
 		if !*mismatchOnly || frameErr != nil {
-			printResult(sent, txCopy, rx, frameErr)
+			if *pattern {
+				printPatternResult(sent, txCopy, rx, frameErr)
+			} else {
+				printResult(sent, txCopy, rx, frameErr)
+			}
 		}
 
 		if *count > 0 && sent >= *count {
@@ -269,6 +282,16 @@ loop:
 		case <-ticker.C:
 		}
 	}
+}
+
+func buildPatternFrame() []byte {
+	tx := make([]byte, spiFrameSize)
+	tx[0] = spiFrameHeader
+	for i := range spiPayloadSize {
+		tx[1+i] = byte(i + 1)
+	}
+	tx[spiFrameSize-1] = spiFrameFooter
+	return tx
 }
 
 func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge, signal, emgStop bool) []byte {
@@ -327,6 +350,26 @@ func validateSPIFrame(rx []byte) error {
 		}
 	}
 	return nil
+}
+
+func printPatternResult(n int, tx, rx []byte, frameErr error) {
+	status := "OK"
+	if frameErr != nil {
+		status = "NG"
+	}
+	fmt.Printf("[%d] %s TX pattern: ", n, status)
+	for i, b := range tx {
+		if i > 0 {
+			fmt.Print(" ")
+		}
+		fmt.Print(b)
+	}
+	fmt.Println()
+	fmt.Printf("     TX raw (%dB): % x\n", len(tx), tx)
+	fmt.Printf("     RX raw (%dB): % x\n", len(rx), rx)
+	if frameErr != nil {
+		fmt.Printf("     !! %v\n", frameErr)
+	}
 }
 
 func printResult(n int, tx, rx []byte, frameErr error) {

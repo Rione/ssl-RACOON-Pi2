@@ -8,6 +8,40 @@ downstream HSV pipeline (which treats it as BGR, as the original code did).
 from picamera2 import Picamera2
 
 from camera import debug
+from camera.frame_post import postprocess_frame
+from camera.sensor import SENSOR_PROFILES
+
+# Fallback when the sensor model is unknown.
+_DEFAULT_CAPTURE_SIZE = (640, 480)
+
+
+def _camera_info():
+    return Picamera2.global_camera_info()
+
+
+def _detect_sensor_model(camera_info):
+    """Best-effort sensor id from libcamera metadata (imx219, ov5647, ...)."""
+    model = str(camera_info.get("Model", "")).lower()
+    for name in ("imx219", "ov5647", "imx477", "imx708"):
+        if name in model:
+            return name
+    return None
+
+
+def _resolve_capture_size(settings, sensor_model):
+    """Returns capture width/height.
+
+    ``threshold.json`` may override with ``frameWidth`` / ``frameHeight``.
+    Otherwise use the sensor profile's full-FOV default (IMX219: 1640x1232).
+    """
+    if "frameWidth" in settings and "frameHeight" in settings:
+        return int(settings["frameWidth"]), int(settings["frameHeight"])
+
+    profile = SENSOR_PROFILES.get(sensor_model or "", {})
+    size = profile.get("default_capture_size")
+    if size:
+        return int(size[0]), int(size[1])
+    return _DEFAULT_CAPTURE_SIZE
 
 
 class Pi4Capture:
@@ -15,17 +49,39 @@ class Pi4Capture:
         if settings is None:
             settings = {}
 
+        cameras = _camera_info()
+        if not cameras:
+            raise IOError(
+                "No MIPI camera detected by libcamera. "
+                "Check the CSI cable and config.txt overlay "
+                "(e.g. dtoverlay=imx219,cam0 or cam1). "
+                "Run scripts/select-pi4-camera.sh to auto-try overlays."
+            )
+
+        self._settings = settings
+        self._sensor_model = _detect_sensor_model(cameras[0])
+
         self.cap = Picamera2()
-        config = self.cap.create_preview_configuration({"format": "RGB888"})
+        width, height = _resolve_capture_size(settings, self._sensor_model)
+        config = self.cap.create_preview_configuration(
+            main={"size": (width, height), "format": "RGB888"}
+        )
         self.cap.configure(config)
         self.cap.start()
 
-        self._width = int(settings.get("frameWidth", 640))
-        self._height = int(settings.get("frameHeight", 480))
-        debug.log(f"Pi4 (Picamera2) capture started: target {self._width}x{self._height}")
+        self._width = width
+        self._height = height
+        debug.log(
+            f"Pi4 (Picamera2) capture started: {self._sensor_model or 'unknown'} "
+            f"{self._width}x{self._height}"
+        )
 
     def read(self):
-        return (True, self.cap.capture_array())
+        frame = self.cap.capture_array()
+        if frame is None:
+            return False, None
+        frame = postprocess_frame(frame, self._settings, self._sensor_model)
+        return True, frame
 
     def release(self):
         self.cap.close()

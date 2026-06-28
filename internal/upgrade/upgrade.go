@@ -216,10 +216,10 @@ func applyBinary(data []byte, assetURL, targetPath string) error {
 	return fmt.Errorf("no archive binary name candidates for %s", targetPath)
 }
 
-// extractCameraFiles extracts the camera/ tree (Python sources and YOLO models)
-// from the release tarball into destDir, so self-update keeps the camera package
-// and models in sync with the binary. Non-camera entries (binary, README,
-// LICENSE) are ignored.
+// extractCameraFiles extracts the camera/ Python tree from the release tarball
+// into destDir so self-update keeps the camera package in sync with the binary.
+// YOLO .pt weights are published as a separate release asset and are not
+// re-written on self-update (see skipCameraExtract).
 func extractCameraFiles(data []byte, destDir string) error {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
@@ -252,14 +252,34 @@ func extractCameraFiles(data []byte, destDir string) error {
 			log.Printf("Self-update: skipping suspicious archive path %q", hdr.Name)
 			continue
 		}
+		if skipCameraExtract(rel, outPath) {
+			if _, err := io.Copy(io.Discard, tr); err != nil {
+				return fmt.Errorf("skip %s: %w", rel, err)
+			}
+			continue
+		}
 		if err := writeFileAtomic(outPath, tr, os.FileMode(hdr.Mode)); err != nil {
 			return fmt.Errorf("write %s: %w", rel, err)
 		}
 		count++
 	}
 
-	log.Printf("Self-update: refreshed %d camera/model file(s) under %s", count, destDir)
+	log.Printf("Self-update: refreshed %d camera file(s) under %s", count, destDir)
 	return nil
+}
+
+// skipCameraExtract returns true when an archive entry should not be written.
+// YOLO weights are large and rarely change; keep the local copy and avoid
+// re-transferring them on every self-update (older releases may still ship .pt).
+func skipCameraExtract(rel, outPath string) bool {
+	if !strings.HasSuffix(strings.ToLower(rel), ".pt") {
+		return false
+	}
+	if _, err := os.Stat(outPath); err == nil {
+		log.Printf("Self-update: keeping existing model %s", rel)
+		return true
+	}
+	return false
 }
 
 func underCameraDir(rel string) bool {

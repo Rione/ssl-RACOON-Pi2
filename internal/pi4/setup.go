@@ -45,8 +45,21 @@ func SetupNewHostname() {
 	log.Printf("Unixtime is %d", time.Now().UnixNano())
 	log.Println("Change Hostname To " + hostname)
 
-	exec.Command("hostnamectl", "set-hostname", hostname).Run()
-	exec.Command("sudo", "sed", "-i", "/etc/hosts", "-e", "s/raspberrypi/"+hostname+"/g", "/etc/hosts").Run()
+	if err := exec.Command("hostnamectl", "set-hostname", hostname).Run(); err != nil {
+		log.Printf("hostnamectl set-hostname failed: %v", err)
+	}
+
+	// Keep /etc/hosts in sync so sudo and other tools can resolve the new name.
+	// Use the same sed form as rock5a (pi4 previously passed /etc/hosts as the -i
+	// backup suffix, which is incorrect). Also rewrite the 127.0.1.1 line explicitly
+	// because cloud-init may have left "raspberrypi" there.
+	hostsScript := fmt.Sprintf(
+		`sed -i -e 's/raspberrypi/%[1]s/g' -e 's/^127\.0\.1\.1.*/127.0.1.1 %[1]s %[1]s/' /etc/hosts`,
+		hostname,
+	)
+	if err := exec.Command("sh", "-c", hostsScript).Run(); err != nil {
+		log.Printf("failed to update /etc/hosts: %v", err)
+	}
 
 	log.Println("=====Reboot=====")
 
