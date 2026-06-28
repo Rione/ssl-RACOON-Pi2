@@ -40,9 +40,9 @@ class CalibServer(threading.Thread):
                 continue
 
             with conn:
-                self._handle(conn)
+                self._handle_request(conn)
 
-    def _handle(self, conn):
+    def _handle_request(self, conn):
         try:
             data = conn.recv(64)
         except OSError as e:

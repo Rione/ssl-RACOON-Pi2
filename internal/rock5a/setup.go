@@ -105,12 +105,12 @@ func ReadRobotIDFromDIP() int {
 	}
 	defer dip4.Close()
 
-	fmt.Println("DIP1:", readInverted(dip1))
-	fmt.Println("DIP2:", readInverted(dip2))
-	fmt.Println("DIP3:", readInverted(dip3))
-	fmt.Println("DIP4:", readInverted(dip4))
+	fmt.Println("DIP1:", readDIP(dip1))
+	fmt.Println("DIP2:", readDIP(dip2))
+	fmt.Println("DIP3:", readDIP(dip3))
+	fmt.Println("DIP4:", readDIP(dip4))
 
-	return int(readInverted(dip1) + readInverted(dip2)*2 + readInverted(dip3)*4 + readInverted(dip4)*8)
+	return int(readDIP(dip1) + readDIP(dip2)*2 + readDIP(dip3)*4 + readDIP(dip4)*8)
 }
 
 func openOutputGPIO(bank, port, pin int, initialHigh bool) (*gpio.GPIO, error) {
@@ -152,13 +152,13 @@ func openDIPInputGPIO(bank, port, pin int) (*gpio.GPIO, error) {
 	return openInputGPIO(bank, port, pin)
 }
 
-func readInverted(g *gpio.GPIO) uint8 {
+func readDIP(g *gpio.GPIO) uint8 {
 	v, err := g.Read()
 	if err != nil {
 		log.Printf("GPIO read error: %v", err)
 		return 0
 	}
-	if v == "0" {
+	if v == "1" {
 		return 1
 	}
 	return 0
@@ -291,12 +291,12 @@ func printDIPStatus() {
 	}
 	defer dip4.Close()
 
-	fmt.Println("DIP1:", readInverted(dip1))
-	fmt.Println("DIP2:", readInverted(dip2))
-	fmt.Println("DIP3:", readInverted(dip3))
-	fmt.Println("DIP4:", readInverted(dip4))
+	fmt.Println("DIP1:", readDIP(dip1))
+	fmt.Println("DIP2:", readDIP(dip2))
+	fmt.Println("DIP3:", readDIP(dip3))
+	fmt.Println("DIP4:", readDIP(dip4))
 
-	hex := readInverted(dip1) + readInverted(dip2)*2 + readInverted(dip3)*4 + readInverted(dip4)*8
+	hex := readDIP(dip1) + readDIP(dip2)*2 + readDIP(dip3)*4 + readDIP(dip4)*8
 	fmt.Println("HEX:", int(hex))
 }
 

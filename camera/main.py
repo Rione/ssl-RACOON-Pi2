@@ -108,7 +108,14 @@ def main():
                 frame.copy()
             )
 
-            print(center, distance)
+            frame_height, frame_width = frame.shape[:2]
+            if center is not None:
+                graph_x, graph_y = Encoder.pixel_to_graph(
+                    center[0], center[1], frame_width, frame_height
+                )
+                print(graph_x, graph_y, distance)
+            else:
+                print(None, None)
 
             frame = visualizer.draw(frame, center, circleContour, vertices)
 
@@ -117,7 +124,11 @@ def main():
             )
 
             encoded_json_string = Encoder.encodeData(
-                frame_resized, center, distance, quality=jpeg_quality
+                frame_resized,
+                center,
+                frame_width=frame_width,
+                frame_height=frame_height,
+                quality=jpeg_quality,
             )
 
             if encoded_json_string:

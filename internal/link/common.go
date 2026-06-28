@@ -17,14 +17,22 @@ var (
 	prevPowerShutdown    bool
 )
 
-var (
-	prevImageX int
-	prevImageY int
-	zeroCountX int
-	zeroCountY int
+// Default capture resolution halves (640x480). Used to map graph coords to SPI bytes.
+const (
+	cameraFrameHalfWidth  = 320
+	cameraFrameHalfHeight = 240
 )
 
-const zeroTolerance = 5
+func scaleCameraCoord(coord float32, halfSize int) int {
+	scaled := 128 + int(coord*127/float32(halfSize))
+	if scaled < 0 {
+		return 0
+	}
+	if scaled > 255 {
+		return 255
+	}
+	return scaled
+}
 
 func PrepareSendData() []byte {
 	sendbytes := frame.EnsureSendFrame()
@@ -101,39 +109,17 @@ func FinishLinkCycle() {
 }
 
 func updateCameraCoordinates(sendbytes []byte) {
-	if state.ImageDataPtr == nil {
+	if state.ImageDataPtr == nil || !state.ImageDataPtr.IsBallExit {
 		sendbytes[frame.IdxCamBallX] = 0
 		sendbytes[frame.IdxCamBallY] = 0
 		return
 	}
 
-	if state.ImageDataPtr.ImageX == 0 {
-		zeroCountX++
-		if zeroCountX <= zeroTolerance {
-			sendbytes[frame.IdxCamBallX] = byte(prevImageX)
-		} else {
-			sendbytes[frame.IdxCamBallX] = 0
-		}
-	} else {
-		scaledX := int(state.ImageDataPtr.ImageX * 255 / 639)
-		sendbytes[frame.IdxCamBallX] = byte(scaledX)
-		prevImageX = scaledX
-		zeroCountX = 0
-	}
+	scaledX := scaleCameraCoord(state.ImageDataPtr.ImageX, cameraFrameHalfWidth)
+	sendbytes[frame.IdxCamBallX] = byte(scaledX)
 
-	if state.ImageDataPtr.ImageY == 0 {
-		zeroCountY++
-		if zeroCountY <= zeroTolerance {
-			sendbytes[frame.IdxCamBallY] = byte(prevImageY)
-		} else {
-			sendbytes[frame.IdxCamBallY] = 0
-		}
-	} else {
-		scaledY := int(state.ImageDataPtr.ImageY / 10)
-		sendbytes[frame.IdxCamBallY] = byte(scaledY)
-		prevImageY = scaledY
-		zeroCountY = 0
-	}
+	scaledY := scaleCameraCoord(state.ImageDataPtr.ImageY, cameraFrameHalfHeight)
+	sendbytes[frame.IdxCamBallY] = byte(scaledY)
 }
 
 func handleReceiveTimeout(sendbytes []byte) {
