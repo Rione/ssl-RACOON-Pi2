@@ -22,10 +22,12 @@ const (
 )
 
 type PiToMw struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RobotsStatus  *Robot_Status          `protobuf:"bytes,1,req,name=robots_status,json=robotsStatus" json:"robots_status,omitempty"`
-	BallStatus    *Ball_Status           `protobuf:"bytes,2,req,name=ball_status,json=ballStatus" json:"ball_status,omitempty"`
-	Ball          *Ball                  `protobuf:"bytes,3,req,name=ball" json:"ball,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RobotsStatus *Robot_Status          `protobuf:"bytes,1,req,name=robots_status,json=robotsStatus" json:"robots_status,omitempty"`
+	BallStatus   *Ball_Status           `protobuf:"bytes,2,req,name=ball_status,json=ballStatus" json:"ball_status,omitempty"`
+	Ball         *Ball                  `protobuf:"bytes,3,req,name=ball" json:"ball,omitempty"`
+	// True when running on Rock5A (new robot), false on Raspberry Pi (pi4).
+	IsNewRobot    *bool `protobuf:"varint,4,req,name=is_new_robot,json=isNewRobot" json:"is_new_robot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -79,6 +81,13 @@ func (x *PiToMw) GetBall() *Ball {
 		return x.Ball
 	}
 	return nil
+}
+
+func (x *PiToMw) GetIsNewRobot() bool {
+	if x != nil && x.IsNewRobot != nil {
+		return *x.IsNewRobot
+	}
+	return false
 }
 
 type Robot_Status struct {
@@ -329,12 +338,14 @@ var File_pi_to_mw_proto protoreflect.FileDescriptor
 
 const file_pi_to_mw_proto_rawDesc = "" +
 	"\n" +
-	"\x0epi_to_mw.proto\"\x86\x01\n" +
+	"\x0epi_to_mw.proto\"\xa8\x01\n" +
 	"\x06PiToMw\x122\n" +
 	"\rrobots_status\x18\x01 \x02(\v2\r.Robot_StatusR\frobotsStatus\x12-\n" +
 	"\vball_status\x18\x02 \x02(\v2\f.Ball_StatusR\n" +
 	"ballStatus\x12\x19\n" +
-	"\x04ball\x18\x03 \x02(\v2\x05.BallR\x04ball\"\x9f\x03\n" +
+	"\x04ball\x18\x03 \x02(\v2\x05.BallR\x04ball\x12 \n" +
+	"\fis_new_robot\x18\x04 \x02(\bR\n" +
+	"isNewRobot\"\x9f\x03\n" +
 	"\fRobot_Status\x12\x19\n" +
 	"\brobot_id\x18\x01 \x02(\rR\arobotId\x123\n" +
 	"\x16is_detect_photo_sensor\x18\x02 \x02(\bR\x13isDetectPhotoSensor\x129\n" +

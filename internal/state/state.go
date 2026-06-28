@@ -169,6 +169,10 @@ var (
 	VelX1000     bool = false
 
 	PowerShutdownMode bool = false
+
+	// IsNewRobot is true when running on Rock5A (new robot) and false on
+	// Raspberry Pi (pi4). Set by the board-specific registerPlatform.
+	IsNewRobot bool = false
 )
 
 type Adjustment struct {

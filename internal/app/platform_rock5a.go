@@ -5,9 +5,11 @@ package app
 import (
 	"github.com/Rione/ssl-RACOON-Pi2/internal/receive"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/rock5a"
+	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
 )
 
 func registerPlatform() {
+	state.IsNewRobot = true
 	rock5a.RegisterLink()
 	receive.SetPlayBallDetectedSound(rock5a.PlayBallDetectedSound)
 }

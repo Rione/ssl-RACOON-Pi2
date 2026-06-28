@@ -58,7 +58,9 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 	batteryVoltage, capPower uint32, isBallExit bool, imageX, imageY float32,
 	minThreshold, maxThreshold string, ballDetectRadius int32, circularityThreshold float32,
 	flWheelSpeed, blWheelSpeed, brWheelSpeed, frWheelSpeed float32) *pb_gen.PiToMw {
+	isNewRobot := state.IsNewRobot
 	return &pb_gen.PiToMw{
+		IsNewRobot: &isNewRobot,
 		RobotsStatus: &pb_gen.Robot_Status{
 			RobotId:                &robotID,
 			IsDetectPhotoSensor:    &detectPhotoSensor,
