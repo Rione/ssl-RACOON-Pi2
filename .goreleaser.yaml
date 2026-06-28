@@ -36,9 +36,9 @@ archives:
     name_template: "racoon-pi2-pi4_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files: &camera_files
       - src: camera/*.py
-      - src: camera/**/*.py
-        exclude:
-          - "camera/yolo/**"
+      - src: camera/capture/**
+      - src: camera/detect/**
+      - src: camera/transport/**
       - src: camera/requirements.txt
   - id: rock5a
     ids:
