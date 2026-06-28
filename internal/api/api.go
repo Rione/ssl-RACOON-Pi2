@@ -314,16 +314,11 @@ func cameraWorkDir() string {
 }
 
 func restartPythonProcess() error {
-	if pythonCmd != nil && pythonCmd.Process != nil {
-		log.Println("既存のPythonプロセスを停止します。")
-		if err := pythonCmd.Process.Kill(); err != nil {
-			log.Printf("プロセス停止エラー: %v", err)
-		}
-		pythonCmd.Wait()
-	}
+	stopPythonProcess()
 
 	log.Printf("Pythonプロセスを開始します（board=%s）。", cameraBoard)
 	cmd := exec.Command("python3", "-m", "camera")
+	configurePythonCmd(cmd)
 	cmd.Env = append(os.Environ(), "RACOON_BOARD="+cameraBoard)
 	if state.DebugCamera {
 		cmd.Env = append(cmd.Env, "RACOON_CAMERA_DEBUG=1")
@@ -342,4 +337,25 @@ func restartPythonProcess() error {
 
 	log.Println("Pythonプロセスが正常に開始されました。")
 	return nil
+}
+
+// StopPythonProcess terminates the camera Python process and any stale copies
+// still holding the MIPI camera (libcamera allows only one client).
+func StopPythonProcess() {
+	stopPythonProcess()
+}
+
+func stopPythonProcess() {
+	if pythonCmd != nil && pythonCmd.Process != nil {
+		log.Println("既存のPythonプロセスを停止します。")
+		_ = pythonCmd.Process.Kill()
+		_, _ = pythonCmd.Process.Wait()
+		pythonCmd = nil
+	}
+
+	// Orphans survive Ctrl+C of the Go binary; clear them before reopening the camera.
+	_ = exec.Command("pkill", "-TERM", "-f", "python3 -m camera").Run()
+	time.Sleep(300 * time.Millisecond)
+	_ = exec.Command("pkill", "-KILL", "-f", "python3 -m camera").Run()
+	time.Sleep(200 * time.Millisecond)
 }

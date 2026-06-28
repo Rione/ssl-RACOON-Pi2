@@ -137,7 +137,21 @@ def calibrate(frame, settings=None, conf=0.25):
     if model is None:
         return {"ok": False, "error": "YOLO model unavailable"}
 
-    results = model(frame, conf=conf, verbose=False)
+    frame = np.ascontiguousarray(frame)
+
+    def _run_yolo(infer_conf):
+        return model(frame, conf=infer_conf, imgsz=640, verbose=False)
+
+    results = _run_yolo(conf)
+    if not results or _best_box(results[0]) is None:
+        # Retry with a lower threshold (small ball / wide FOV / colour cast).
+        results = _run_yolo(max(0.08, conf * 0.5))
+    if not results or _best_box(results[0]) is None:
+        # Retry on a 180°-rotated copy when camera orientation is wrong.
+        rotated = cv2.rotate(frame, cv2.ROTATE_180)
+        results = model(rotated, conf=max(0.08, conf * 0.5), imgsz=640, verbose=False)
+        if results and _best_box(results[0]) is not None:
+            frame = rotated
     if not results:
         return {"ok": False, "error": "ball not detected"}
 

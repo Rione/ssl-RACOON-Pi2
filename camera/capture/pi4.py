@@ -3,12 +3,17 @@
 Mirrors the original main.py behaviour: Picamera2 is configured with the
 "RGB888" preview format, and the captured array is consumed directly by the
 downstream HSV pipeline (which treats it as BGR, as the original code did).
+
+IMX219 on RACOON is mounted upside-down; 180° correction is applied in
+software (``frame_post.apply_orientation``), not via libcamera Transform,
+which is unreliable across Pi OS / Picamera2 versions.
 """
 
+import cv2
 from picamera2 import Picamera2
 
 from camera import debug
-from camera.frame_post import postprocess_frame
+from camera.frame_post import _flip180_enabled, postprocess_frame
 from camera.sensor import SENSOR_PROFILES
 
 # Fallback when the sensor model is unknown.
@@ -64,23 +69,31 @@ class Pi4Capture:
         self.cap = Picamera2()
         width, height = _resolve_capture_size(settings, self._sensor_model)
         config = self.cap.create_preview_configuration(
-            main={"size": (width, height), "format": "RGB888"}
+            main={"size": (width, height), "format": "RGB888"},
         )
         self.cap.configure(config)
         self.cap.start()
 
         self._width = width
         self._height = height
+        flip = _flip180_enabled(settings, self._sensor_model)
         debug.log(
             f"Pi4 (Picamera2) capture started: {self._sensor_model or 'unknown'} "
-            f"{self._width}x{self._height}"
+            f"{self._width}x{self._height} flip180={flip}"
         )
 
     def read(self):
         frame = self.cap.capture_array()
         if frame is None:
             return False, None
-        frame = postprocess_frame(frame, self._settings, self._sensor_model)
+        # Picamera2 RGB888 → OpenCV/YOLO/HSV pipeline expects BGR.
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        frame = postprocess_frame(
+            frame,
+            self._settings,
+            self._sensor_model,
+            orient=True,
+        )
         return True, frame
 
     def release(self):

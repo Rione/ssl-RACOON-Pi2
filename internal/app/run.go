@@ -196,6 +196,7 @@ func setupSignalHandler() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
+			api.StopPythonProcess()
 			cleanupBoard()
 			log.Println("Bye")
 			os.Exit(0)

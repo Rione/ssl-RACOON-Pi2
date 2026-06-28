@@ -26,6 +26,10 @@ def _bool_setting(settings, key, env_key, default=False):
 
 def _parse_color_gains(settings, sensor_model):
     """Returns BGR gain multipliers, or ``None`` to skip colour correction."""
+    # IMX219 colour gains in SENSOR_PROFILES target Rock5A/Rockchip ISP only.
+    if os.environ.get("RACOON_BOARD", "").strip().lower() == "pi4":
+        return None
+
     if settings and settings.get("cameraColorGains") is not None:
         raw = str(settings["cameraColorGains"])
     elif "CAMERA_COLOR_GAINS" in os.environ:
@@ -75,7 +79,7 @@ def apply_orientation(frame, settings, sensor_model=None):
     return out
 
 
-def postprocess_frame(frame, settings=None, sensor_model=None):
+def postprocess_frame(frame, settings=None, sensor_model=None, orient=True):
     """Applies sensor-specific colour correction and software orientation."""
     settings = settings or {}
 
@@ -83,4 +87,6 @@ def postprocess_frame(frame, settings=None, sensor_model=None):
     if gains is not None:
         frame = apply_color_gains(frame, gains)
 
-    return apply_orientation(frame, settings, sensor_model)
+    if orient:
+        frame = apply_orientation(frame, settings, sensor_model)
+    return frame
