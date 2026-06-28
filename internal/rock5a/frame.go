@@ -6,13 +6,13 @@ import "github.com/Rione/ssl-RACOON-Pi2/internal/state"
 
 func ensureSendFrame() []byte {
 	b := state.GetSendPayload()
-	if len(b) < 18 {
-		b = make([]byte, 19)
-		b[17] = state.InfoEmgStop
-		return b
+	if len(b) < SPIFrameSize {
+		frame := make([]byte, SPIFrameSize)
+		frame[17] = state.InfoEmgStop
+		return frame
 	}
-	if len(b) == 18 {
-		b = append(b, 0x00)
+	if len(b) > SPIFrameSize {
+		return b[:SPIFrameSize]
 	}
 	return b
 }

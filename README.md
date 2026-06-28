@@ -51,10 +51,14 @@ go build -tags pi4 -o racoon-pi2 ./cmd/racoon-pi2
 # Rock5A（SPI / rock5a-gpio-go）
 go build -tags rock5a -o racoon-pi2 ./cmd/racoon-pi2
 
-# Rock5A 診断ツール
-go build -tags rock5a -o dip-test ./cmd/dip_test
-go build -tags rock5a -o spi_test ./cmd/spi_test
+# Rock5A 診断ツール（開発 PC 上で Linux/arm64 向けにクロスビルドしてボードへ配置）
+GOOS=linux GOARCH=arm64 go build -tags rock5a -o dip-test ./cmd/dip_test
+GOOS=linux GOARCH=arm64 go build -tags rock5a -o spi_test ./cmd/spi_test
+# 例: scp または ssh 経由で Rock5A へコピー
+# scp spi_test root@<robot>:/root/spi_test
 ```
+
+Rock5A 上で `go build` した場合は `GOOS`/`GOARCH` は不要です。Mac 等でビルドしたバイナリをそのままコピーしても **アーキテクチャ不一致で動きません**（または古いバイナリのまま）。必ず `GOOS=linux GOARCH=arm64` でビルドしてください。
 
 タグ未指定の `go build .` は不可です。
 
@@ -68,6 +72,31 @@ go build -tags rock5a -o spi_test ./cmd/spi_test
 | ------ | ------------ | -------- |
 | Pi 4B | Picamera2（MIPI CSI） | Picamera2 既定 |
 | Rock5A | OpenCV V4L2 | `/dev/video11`（既定）。`threshold.json` の `cameraDevice` で上書き可 |
+
+### Rock5A のセンサー自動判別（IMX219 / OV5647）
+
+Rock5A は Raspberry Pi Camera v1.3（OV5647）と v2（IMX219）の両方に対応しますが、それぞれ別のデバイスツリーオーバーレイを使い、**同時に有効化すると CSI パイプラインが壊れます**（`rkcif ... get remote terminal sensor failed`）。
+
+| センサー | モジュール | オーバーレイ | I2C アドレス |
+| -------- | ---------- | ------------ | ------------ |
+| IMX219 | Pi Camera v2 | `rpi-camera-v2` | `0x10` |
+| OV5647 | Pi Camera v1.3 | `rpi-camera-v1_3` | `0x36` |
+
+- **起動時のオーバーレイ自動選択**: `scripts/select-rock5a-camera.sh` を systemd の oneshot（`scripts/racoon-camera-autoselect.service`）として `ssl-racoon.service` より前に実行します。センサーの subdev（`imx219` / `ov5647`）が出ていなければ `/boot/dietpiEnv.txt` の `overlays=` を片方だけになるよう書き換えて 1 回だけ再起動します。状態ファイル `/var/lib/racoon-camera-autoselect.state` で IMX219↔OV5647 を最大 1 巡しか試さないため、リブートループにはなりません。正しいオーバーレイが既に設定済み（通常運転）なら何もしません。
+
+  ```bash
+  # 初回のみ（端末上で）
+  sudo install -m 0755 scripts/select-rock5a-camera.sh /usr/local/sbin/select-rock5a-camera.sh
+  sudo install -m 0644 scripts/racoon-camera-autoselect.service /etc/systemd/system/racoon-camera-autoselect.service
+  sudo systemctl daemon-reload
+  sudo systemctl enable racoon-camera-autoselect.service
+  ```
+
+- **露出・ゲインのセンサー別設定**: `camera/sensor.py` は `/sys/class/video4linux/v4l-subdev*/name` から接続中センサーを判別し、センサーごとに正しいコントロール名・範囲で露出/ゲインを適用します。IMX219 は明るさを実効ゲイン（`gain`、最大 43663。`analogue_gain` ではない）で稼ぎ、動きブレを抑えるため露出は低め（既定 `exposure=1000` / `gain=5000`）にします。OV5647 は従来どおり `auto_exposure`/`gain_automatic`/`analogue_gain` を使用します。`threshold.json` の `cameraExposure` / `cameraGain` / `cameraAutoExposure` / `cameraSensorSubdev` で上書きできます。
+
+- **上下左右反転（180°回転）**: センサーごとに既定値があります（**IMX219: 反転あり** / **OV5647: 反転なし**）。RACOON の取り付け向きに合わせた設定です。`threshold.json` の `"cameraFlip180": true/false` または環境変数 `CAMERA_FLIP180` で**接続中センサーに対して上書き**できます。個別の `cameraHFlip` / `cameraVFlip` も引き続き利用可能です。反転はソフトウェア側で行います（センサー側 flip は Bayer デモザイクの都合で色が緑に寄るため使いません）。
+
+- **IMX219 の色補正**: Rockchip ISP + IMX219 ではドライバ AWB がなく緑被りが出やすいため、IMX219 接続時は既定で BGR ゲイン補正（`1.15, 0.78, 1.12`）を適用します。`threshold.json` の `"cameraColorGains": "1.15,0.78,1.12"`（B,G,R 順）で上書きできます。OV5647 では既定では適用しません。
 
 ### 依存パッケージ
 
@@ -137,7 +166,7 @@ sudo raspi-config
 
 ## Rock5A（SPI）
 
-Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz, Mode0）です。
+Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz, Mode0）です。送受信フレーム長は **18 バイト**（有効ペイロード 11 バイト + パディング 7 バイト）です。
 
 ### PIN ASSIGN / ピン配置
 
@@ -155,5 +184,14 @@ Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz,
 | DIP 4         | GPIO1_B5 | Pin 22 |
 
 ブザー PWM にはデバイスツリーオーバーレイ `rk3588-pwm15-m1` の有効化が必要です。
+
+### SPI 診断 (`spi_test`)
+
+```bash
+sudo /root/spi_test -interval 8ms          # 本番と同じ 125Hz
+sudo /root/spi_test -once                  # 1 回送信（TX 18 バイト）
+sudo /root/spi_test -interval 8ms -mismatch-only   # NG のみ表示
+# Ctrl+C で OK/NG パケット統計を表示
+```
 
 初期ホスト名 `DietPi` の場合、初回起動時に `racoon-XXXXX` 形式のホスト名へ自動変更されます。

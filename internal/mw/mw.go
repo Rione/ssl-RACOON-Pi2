@@ -174,7 +174,23 @@ func loadOrCreateThresholdConfig() state.Adjustment {
 }
 
 func saveAdjustmentConfig(adjustment state.Adjustment) error {
-	jsonData, err := json.Marshal(adjustment)
+	// Preserve any extra keys (e.g. camera* settings shared with the Python
+	// camera process, such as cameraFlip180 / cameraExposure / cameraGain) by
+	// merging into the existing file instead of overwriting it with only the
+	// Adjustment fields.
+	merged := map[string]interface{}{}
+	if data, err := os.ReadFile(thresholdFile); err == nil {
+		if err := json.Unmarshal(data, &merged); err != nil {
+			merged = map[string]interface{}{}
+		}
+	}
+
+	merged["minThreshold"] = adjustment.MinThreshold
+	merged["maxThreshold"] = adjustment.MaxThreshold
+	merged["ballDetectRadius"] = adjustment.BallDetectRadius
+	merged["circularityThreshold"] = adjustment.CircularityThreshold
+
+	jsonData, err := json.Marshal(merged)
 	if err != nil {
 		return fmt.Errorf("JSON変換エラー: %w", err)
 	}

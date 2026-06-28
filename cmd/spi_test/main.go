@@ -2,17 +2,23 @@
 
 // SPI送受信テスト用ツール（Rock5A Master → ロボットMCU Slave）
 //
+// 本番 racoon-pi2-rock5a と同じ 18 バイト TX / 11+7 バイト RX レイアウト。
+// （旧 19 バイト目 PowerCmd は廃止済み）
+//
 // ビルド:
 //
-//	go build -o spi_test ./cmd/spi_test
+//	go build -tags rock5a -o spi_test ./cmd/spi_test
 //
 // 実行例:
 //
 //	sudo ./spi_test                          # 1秒間隔で連続送信
+//	sudo ./spi_test -interval 8ms            # 本番と同じ 125Hz
 //	sudo ./spi_test -count 10 -velx 500      # VelX=500mm/s を10回送信
 //	sudo ./spi_test -once -kick 50 -dribble 30
 //	sudo ./spi_test -sweep -interval 16ms   # VelX: -1000→0→1000→0→-1000 を繰り返し
 //	sudo ./spi_test -sweep -mismatch-only   # フレームずれ時のみ表示
+//
+// Ctrl+C 終了時に OK/NG パケット数の統計を表示する。
 package main
 
 import (
@@ -34,11 +40,12 @@ import (
 const (
 	spiDevPath   = "/dev/spidev4.0"
 	spiSpeedHz   = 1_000_000
-	spiFrameSize = 19
+	spiFrameSize = 18
 	spiRecvSize  = 11
 )
 
 const (
+	infoEmgStop        = 0b00000001
 	infoDoCharge       = 0b00010000
 	infoSignalReceived = 0b00100000
 )
@@ -59,7 +66,7 @@ type sendFrame struct {
 	Informations  uint8
 }
 
-// recvFrame は Pi UART 受信と同じ 11 バイト（フッターなし・リトルエンディアン）
+// recvFrame は本番 SPI 受信と同じ先頭 11 バイト（リトルエンディアン）
 type recvFrame struct {
 	Volt              uint8
 	SensorInformation uint8
@@ -76,6 +83,36 @@ type velXSweep struct {
 	step  int
 	max   int
 	dir   int // 1: 増加, -1: 減少
+}
+
+type frameStats struct {
+	total int
+	ok    int
+	ng    int
+}
+
+func (s *frameStats) record(frameErr error) {
+	s.total++
+	if frameErr == nil {
+		s.ok++
+		return
+	}
+	s.ng++
+}
+
+func (s *frameStats) printSummary(interrupted bool) {
+	fmt.Println("--- statistics ---")
+	if interrupted {
+		fmt.Println("stopped by Ctrl+C")
+	}
+	if s.total == 0 {
+		fmt.Println("packets: 0 (no SPI exchange completed)")
+		return
+	}
+	errPct := float64(s.ng) / float64(s.total) * 100
+	fmt.Printf("packets total: %d\n", s.total)
+	fmt.Printf("  OK: %d\n", s.ok)
+	fmt.Printf("  NG: %d (%.2f%%)\n", s.ng, errPct)
 }
 
 func newVelXSweep(max, step int) *velXSweep {
@@ -123,12 +160,12 @@ func main() {
 	chip := flag.Int("chip", 0, "チップパワー [0-255]")
 	camX := flag.Int("camx", 0, "カメラボールX [0-255]")
 	camY := flag.Int("camy", 0, "カメラボールY [0-255]")
-	charge := flag.Bool("charge", false, "コンデンサ充電フラグをONにする（デフォルトOFF=安全）")
+	charge := flag.Bool("charge", false, "Informations: DoCharge (0b00010000)")
+	signalRecv := flag.Bool("signal", false, "Informations: SignalReceived (0b00100000)。未指定時は本番 idle と同じ EmgStop のみ")
 	sweep := flag.Bool("sweep", false, "VelXを -max→0→max→0→-max とスイープする")
 	sweepMax := flag.Int("sweep-max", 1000, "スイープ時のVelX最大絶対値 [mm/s]")
 	sweepStep := flag.Int("sweep-step", 100, "スイープ時のVelX刻み幅 [mm/s]")
 	mismatchOnly := flag.Bool("mismatch-only", false, "受信フレームずれ(NG)時のみ詳細を表示")
-	shutdown := flag.Bool("shutdown", false, "19バイト目に0x99（電源強制シャットダウン）を載せる")
 
 	flag.Parse()
 
@@ -161,6 +198,7 @@ func main() {
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
+	defer signal.Stop(sig)
 
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
@@ -170,13 +208,20 @@ func main() {
 		sweeper = newVelXSweep(*sweepMax, *sweepStep)
 	}
 
+	stats := &frameStats{}
+	interrupted := false
+	defer func() {
+		stats.printSummary(interrupted)
+	}()
+
 	sent := 0
 	prevFrameOK := true
+loop:
 	for {
 		select {
 		case <-sig:
-			log.Println("Interrupted")
-			return
+			interrupted = true
+			break loop
 		default:
 		}
 
@@ -185,7 +230,7 @@ func main() {
 			velXNow = sweeper.next()
 		}
 
-		tx := buildFrame(velXNow, *velY, *velAng, *dribble, *kick, *chip, *camX, *camY, *charge, *shutdown)
+		tx := buildFrame(velXNow, *velY, *velAng, *dribble, *kick, *chip, *camX, *camY, *charge, *signalRecv)
 		rx := make([]byte, spiFrameSize)
 		txCopy := append([]byte(nil), tx...)
 		if err := conn.Tx(tx, rx); err != nil {
@@ -194,6 +239,7 @@ func main() {
 
 		sent++
 		frameErr := validateRecvFrame(rx)
+		stats.record(frameErr)
 		frameOK := frameErr == nil
 		if !frameOK && prevFrameOK {
 			log.Printf("!! SPI RX FRAME MISMATCH: %v", frameErr)
@@ -208,20 +254,23 @@ func main() {
 		}
 
 		if *count > 0 && sent >= *count {
-			return
+			break loop
 		}
 
 		select {
 		case <-sig:
-			log.Println("Interrupted")
-			return
+			interrupted = true
+			break loop
 		case <-ticker.C:
 		}
 	}
 }
 
-func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge, shutdown bool) []byte {
-	info := uint8(infoSignalReceived)
+func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge, signal bool) []byte {
+	info := uint8(infoEmgStop)
+	if signal {
+		info |= infoSignalReceived
+	}
 	if charge {
 		info |= infoDoCharge
 	}
@@ -243,10 +292,8 @@ func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge,
 		log.Fatalf("binary.Write: %v", err)
 	}
 	tx := buf.Bytes()
-	if shutdown {
-		tx = append(tx, 0x99)
-	} else {
-		tx = append(tx, 0x00)
+	if len(tx) != spiFrameSize {
+		log.Fatalf("frame size: got %d bytes, want %d", len(tx), spiFrameSize)
 	}
 	return tx
 }

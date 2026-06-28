@@ -37,7 +37,7 @@ import (
 const (
 	spiDevPath   = "/dev/spidev4.0"
 	spiSpeedHz   = 1_000_000
-	spiFrameSize = 19
+	spiFrameSize = 18
 	spiRecvSize  = 11
 
 	infoDoCharge       = 0b00010000
@@ -426,10 +426,10 @@ func (r *spiRunner) buildFrameLocked(pulse *activePulse) []byte {
 		}
 	}
 
-	return buildFrame(int(s.velX), int(s.velY), int(s.velAng), int(s.dribble), int(kick), int(chip), 0, 0, s.charge, false, info)
+	return buildFrame(int(s.velX), int(s.velY), int(s.velAng), int(s.dribble), int(kick), int(chip), 0, 0, s.charge, info)
 }
 
-func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge, shutdown bool, infoOverride uint8) []byte {
+func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge bool, infoOverride uint8) []byte {
 	info := infoOverride
 	if infoOverride == 0 {
 		info = infoSignalReceived
@@ -454,13 +454,7 @@ func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge,
 	if err := binary.Write(buf, binary.LittleEndian, frame); err != nil {
 		log.Fatalf("binary.Write: %v", err)
 	}
-	tx := buf.Bytes()
-	if shutdown {
-		tx = append(tx, 0x99)
-	} else {
-		tx = append(tx, 0x00)
-	}
-	return tx
+	return buf.Bytes()
 }
 
 func (r *spiRunner) armPulse(kind pulseKind, power uint8, direct bool) error {
@@ -692,7 +686,7 @@ func doOnce(reader *bufio.Reader, r *spiRunner) {
 	charge := r.tx.charge
 	r.tx.mu.Unlock()
 
-	tx := buildFrame(velX, velY, velAng, dribble, kick, chip, 0, 0, charge, false, 0)
+	tx := buildFrame(velX, velY, velAng, dribble, kick, chip, 0, 0, charge, 0)
 	rx := make([]byte, spiFrameSize)
 	if err := r.conn.Tx(tx, rx); err != nil {
 		fmt.Println("Tx error:", err)

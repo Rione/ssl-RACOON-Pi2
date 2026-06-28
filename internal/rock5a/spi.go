@@ -59,10 +59,10 @@ func RunSPI(done <-chan struct{}, myID uint32) {
 func processSPICommunication(conn spi.Conn) {
 	sendbytes := link.PrepareSendData()
 	tx := link.PrepareHardwareTx(sendbytes)
-	if len(tx) > SPILinkFrameSize {
-		tx = tx[:SPILinkFrameSize]
+	if len(tx) > SPIFrameSize {
+		tx = tx[:SPIFrameSize]
 	}
-	rx := make([]byte, len(tx))
+	rx := make([]byte, SPIFrameSize)
 
 	if err := conn.Tx(tx, rx); err != nil {
 		util.CheckError(err)
@@ -99,8 +99,8 @@ func processSPICommunication(conn spi.Conn) {
 			state.Recvdata.FlWheelSpeed, state.Recvdata.BlWheelSpeed, state.Recvdata.BrWheelSpeed, state.Recvdata.FrWheelSpeed)
 		log.Printf("[SPI RX] Wheel(m/s) FL: %.3f, BL: %.3f, BR: %.3f, FR: %.3f",
 			state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
-		log.Printf("[SPI RX] full (%dB link / %dB frame): % x", SPILinkFrameSize, SPIFrameSize, rx)
-		link.LogSendData(sendbytes)
+		log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
+		link.LogSendData(tx)
 		if state.DryRun {
 			link.LogSendData(tx)
 		}
@@ -130,10 +130,10 @@ func motorRawToWheelMS(raw int16) float32 {
 }
 
 func validateRecvFrame(rx []byte) error {
-	if len(rx) < SPILinkFrameSize {
-		return fmt.Errorf("short frame: got %d bytes, want %d", len(rx), SPILinkFrameSize)
+	if len(rx) < SPIFrameSize {
+		return fmt.Errorf("short frame: got %d bytes, want %d", len(rx), SPIFrameSize)
 	}
-	for i := SPIRecvSize; i < SPILinkFrameSize; i++ {
+	for i := SPIRecvSize; i < SPIFrameSize; i++ {
 		if rx[i] != 0 {
 			return fmt.Errorf("padding[%d]: expected 00, got %02x", i, rx[i])
 		}

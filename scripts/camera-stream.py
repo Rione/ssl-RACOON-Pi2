@@ -15,7 +15,8 @@ import cv2
 import numpy as np
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from camera.sensor import configure_sensor
+from camera.frame_post import postprocess_frame
+from camera.sensor import configure_sensor, detect_sensor
 
 latest_frame = None
 frame_seq = 0
@@ -45,7 +46,7 @@ def enhance_frame(frame, gamma, brightness):
     return frame
 
 
-def capture_loop(device, width, height, fps, gamma, brightness):
+def capture_loop(device, width, height, fps, gamma, brightness, settings, sensor_model):
     global latest_frame, frame_seq
 
     cap = cv2.VideoCapture(device)
@@ -68,6 +69,7 @@ def capture_loop(device, width, height, fps, gamma, brightness):
             time.sleep(0.02)
             continue
 
+        frame = postprocess_frame(frame, settings, sensor_model)
         frame = enhance_frame(frame, gamma, brightness)
 
         with frame_lock:
@@ -197,7 +199,15 @@ def parse_args():
 def main():
     args = parse_args()
 
-    configure_sensor(
+    # Re-use threshold.json for flip/colour settings when present.
+    try:
+        from camera.settings import load_settings
+
+        stream_settings = load_settings()
+    except Exception:
+        stream_settings = {}
+
+    stream_settings.update(
         {
             "cameraSensorSubdev": args.sensor_subdev,
             "cameraExposure": args.exposure,
@@ -205,6 +215,9 @@ def main():
             "cameraAutoExposure": args.auto_exposure,
         }
     )
+
+    configure_sensor(stream_settings)
+    _, sensor_model = detect_sensor(args.sensor_subdev)
 
     threading.Thread(
         target=capture_loop,
@@ -215,6 +228,8 @@ def main():
             args.fps,
             max(0.1, args.gamma),
             max(-255, min(args.brightness, 255)),
+            stream_settings,
+            sensor_model,
         ),
         daemon=True,
     ).start()

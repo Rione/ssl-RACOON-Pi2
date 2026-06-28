@@ -1,0 +1,16 @@
+[Unit]
+Description=Rock 5A MIPI camera overlay auto-selection (IMX219/OV5647)
+DefaultDependencies=no
+After=local-fs.target
+Before=ssl-racoon.service
+ConditionPathExists=/boot/dietpiEnv.txt
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/select-rock5a-camera.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

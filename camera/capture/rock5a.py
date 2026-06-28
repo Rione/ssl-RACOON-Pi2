@@ -11,7 +11,8 @@ threshold.json (useful for USB cameras at /dev/video0, etc.).
 import cv2
 
 from camera import debug
-from camera.sensor import configure_sensor
+from camera.frame_post import postprocess_frame
+from camera.sensor import configure_sensor, detect_sensor
 
 DEFAULT_DEVICE = 11
 
@@ -21,7 +22,12 @@ class Rock5aCapture:
         if settings is None:
             settings = {}
 
+        self._settings = settings
         configure_sensor(settings)
+
+        _, self._sensor_model = detect_sensor(
+            settings.get("cameraSensorSubdev") or None
+        )
 
         device = int(settings.get("cameraDevice", DEFAULT_DEVICE))
         self._device = device
@@ -48,7 +54,10 @@ class Rock5aCapture:
         )
 
     def read(self):
-        return self.cap.read()
+        ok, frame = self.cap.read()
+        if ok and frame is not None:
+            frame = postprocess_frame(frame, self._settings, self._sensor_model)
+        return ok, frame
 
     def release(self):
         if self.cap is not None:
