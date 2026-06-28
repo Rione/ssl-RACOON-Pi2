@@ -25,6 +25,10 @@ var Version string
 
 const githubRepo = "Rione/ssl-RACOON-Pi2"
 
+// minReleaseBinarySize rejects truncated or mis-packaged release assets before
+// they can overwrite the running executable (e.g. empty wget downloads).
+const minReleaseBinarySize = 1 << 20 // 1 MiB
+
 func getVersion() string {
 	if Version != "" {
 		return Version
@@ -169,6 +173,19 @@ func applyRelease(rel *selfupdate.Release, targetPath string) error {
 	return nil
 }
 
+func validateReleaseBinary(payload []byte) error {
+	if len(payload) < minReleaseBinarySize {
+		return fmt.Errorf(
+			"release binary too small: %d bytes (minimum %d)",
+			len(payload), minReleaseBinarySize,
+		)
+	}
+	if len(payload) < 4 || payload[0] != 0x7f || payload[1] != 'E' || payload[2] != 'L' || payload[3] != 'F' {
+		return fmt.Errorf("release binary is not an ELF executable")
+	}
+	return nil
+}
+
 func applyBinary(data []byte, assetURL, targetPath string) error {
 	var lastErr error
 	for _, name := range archiveBinaryNames(targetPath) {
@@ -177,8 +194,18 @@ func applyBinary(data []byte, assetURL, targetPath string) error {
 			lastErr = err
 			continue
 		}
-		log.Printf("Updating %s using archive binary %q", targetPath, name)
-		if err := update.Apply(asset, update.Options{TargetPath: targetPath}); err != nil {
+		payload, err := io.ReadAll(asset)
+		if err != nil {
+			lastErr = fmt.Errorf("read archive binary %q: %w", name, err)
+			continue
+		}
+		if err := validateReleaseBinary(payload); err != nil {
+			lastErr = fmt.Errorf("archive binary %q: %w", name, err)
+			log.Printf("Self-update: rejecting %q from %s: %v", name, assetURL, err)
+			continue
+		}
+		log.Printf("Updating %s using archive binary %q (%d bytes)", targetPath, name, len(payload))
+		if err := update.Apply(bytes.NewReader(payload), update.Options{TargetPath: targetPath}); err != nil {
 			return err
 		}
 		return nil
