@@ -161,7 +161,8 @@ func main() {
 	camX := flag.Int("camx", 0, "カメラボールX [0-255]")
 	camY := flag.Int("camy", 0, "カメラボールY [0-255]")
 	charge := flag.Bool("charge", false, "Informations: DoCharge (0b00010000)")
-	signalRecv := flag.Bool("signal", false, "Informations: SignalReceived (0b00100000)。未指定時は本番 idle と同じ EmgStop のみ")
+	signalRecv := flag.Bool("signal", true, "Informations: SignalReceived (0b00100000)。本番 MW 接続時と同様")
+	emgStop := flag.Bool("emgstop", false, "Informations: EmgStop (0b00000001)。起動直後 idle のみで使用")
 	sweep := flag.Bool("sweep", false, "VelXを -max→0→max→0→-max とスイープする")
 	sweepMax := flag.Int("sweep-max", 1000, "スイープ時のVelX最大絶対値 [mm/s]")
 	sweepStep := flag.Int("sweep-step", 100, "スイープ時のVelX刻み幅 [mm/s]")
@@ -230,7 +231,7 @@ loop:
 			velXNow = sweeper.next()
 		}
 
-		tx := buildFrame(velXNow, *velY, *velAng, *dribble, *kick, *chip, *camX, *camY, *charge, *signalRecv)
+		tx := buildFrame(velXNow, *velY, *velAng, *dribble, *kick, *chip, *camX, *camY, *charge, *signalRecv, *emgStop)
 		rx := make([]byte, spiFrameSize)
 		txCopy := append([]byte(nil), tx...)
 		if err := conn.Tx(tx, rx); err != nil {
@@ -266,8 +267,11 @@ loop:
 	}
 }
 
-func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge, signal bool) []byte {
-	info := uint8(infoEmgStop)
+func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge, signal, emgStop bool) []byte {
+	var info uint8
+	if emgStop {
+		info |= infoEmgStop
+	}
 	if signal {
 		info |= infoSignalReceived
 	}

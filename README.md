@@ -188,10 +188,14 @@ Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz,
 ### SPI 診断 (`spi_test`)
 
 ```bash
-sudo /root/spi_test -interval 8ms          # 本番と同じ 125Hz
+sudo /root/spi_test -interval 8ms          # 本番と同じ 125Hz（SignalReceived のみ、EmgStop=0）
 sudo /root/spi_test -once                  # 1 回送信（TX 18 バイト）
+sudo /root/spi_test -interval 8ms -velx 500 -charge   # 走行テスト（DoCharge も付与）
+sudo /root/spi_test -emgstop               # 起動直後 idle 相当（EmgStop=1、走行不可）
 sudo /root/spi_test -interval 8ms -mismatch-only   # NG のみ表示
 # Ctrl+C で OK/NG パケット統計を表示
 ```
+
+Informations の bit0 (`EmgStop`) は **1=非常停止中** です。MW から指令を受けている本番状態では 0 です。
 
 初期ホスト名 `DietPi` の場合、初回起動時に `racoon-XXXXX` 形式のホスト名へ自動変更されます。
