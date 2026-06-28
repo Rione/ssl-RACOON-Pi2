@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
@@ -13,6 +14,37 @@ import (
 	"github.com/Rione/ssl-RACOON-Pi2/proto/pb_gen"
 	"google.golang.org/protobuf/proto"
 )
+
+// The adjustment (HSV thresholds etc.) is cached so that calibration and manual
+// changes take effect without restarting the MW loop. ReloadAdjustment re-reads
+// threshold.json, which is the source of truth shared with the camera process.
+var (
+	adjustmentMu      sync.RWMutex
+	currentAdjustment state.Adjustment
+	adjustmentLoaded  bool
+)
+
+// GetAdjustment returns the cached adjustment, loading it from disk on first use.
+func GetAdjustment() state.Adjustment {
+	adjustmentMu.RLock()
+	if adjustmentLoaded {
+		adj := currentAdjustment
+		adjustmentMu.RUnlock()
+		return adj
+	}
+	adjustmentMu.RUnlock()
+	return ReloadAdjustment()
+}
+
+// ReloadAdjustment re-reads threshold.json into the cache and returns it.
+func ReloadAdjustment() state.Adjustment {
+	adj := loadOrCreateThresholdConfig()
+	adjustmentMu.Lock()
+	currentAdjustment = adj
+	adjustmentLoaded = true
+	adjustmentMu.Unlock()
+	return adj
+}
 
 const (
 	thresholdFile    = "threshold.json"
@@ -61,7 +93,7 @@ func RunServer(done <-chan struct{}, myID uint32) {
 	util.CheckError(err)
 	defer conn.Close()
 
-	adjustment := loadOrCreateThresholdConfig()
+	ReloadAdjustment()
 
 	ticker := time.NewTicker(sendInterval)
 	defer ticker.Stop()
@@ -108,7 +140,7 @@ func RunServer(done <-chan struct{}, myID uint32) {
 
 			case state.StateConnected:
 				if currentPcAddr != nil {
-					sendStatusToMW(conn, currentPcAddr, myID, adjustment)
+					sendStatusToMW(conn, currentPcAddr, myID, GetAdjustment())
 				}
 			}
 		}

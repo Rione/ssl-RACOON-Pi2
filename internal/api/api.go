@@ -6,9 +6,9 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -109,6 +109,8 @@ func handleRequest(conn net.Conn) {
 		handleUpdatePython(conn)
 	case "changeadjustment":
 		handleChangeAdjustment(conn, pathParts)
+	case "calibballcolor":
+		handleCalibBallColor(conn)
 	case "powershutdown":
 		handlePowerShutdown(conn)
 	default:
@@ -201,11 +203,68 @@ func handleChangeAdjustment(conn net.Conn, pathParts []string) {
 		return
 	}
 
+	mw.ReloadAdjustment()
+
 	sendHTTPResponse(conn, 200, "text/plain", "CHANGE ADJUSTMENT OK\r\n")
 
 	if err := restartPythonProcess(); err != nil {
 		log.Printf("Pythonプロセス再起動エラー: %v", err)
 	}
+}
+
+// handleCalibBallColor triggers a one-shot YOLO calibration in the camera
+// process, which recomputes HSV thresholds from a detected ball and writes
+// threshold.json. On success the MW threshold cache is reloaded so the new
+// values take effect without restarting the camera.
+func handleCalibBallColor(conn net.Conn) {
+	body, ok, err := requestCalibration()
+	if err != nil {
+		log.Printf("キャリブレーション要求エラー: %v", err)
+		sendErrorResponse(conn, 500)
+		return
+	}
+
+	if !ok {
+		sendHTTPResponse(conn, 400, "application/json", string(body))
+		return
+	}
+
+	mw.ReloadAdjustment()
+	sendHTTPResponse(conn, 200, "application/json", string(body))
+}
+
+// requestCalibration asks the camera process (TCP, localhost) to run a
+// calibration and returns the raw JSON response, whether it reported success,
+// and any transport error.
+func requestCalibration() ([]byte, bool, error) {
+	addr := fmt.Sprintf("127.0.0.1:%d", state.CalibPort)
+	conn, err := net.DialTimeout("tcp", addr, calibDialTimeout)
+	if err != nil {
+		return nil, false, fmt.Errorf("カメラプロセスへ接続できませんでした: %w", err)
+	}
+	defer conn.Close()
+
+	if err := conn.SetDeadline(time.Now().Add(calibTimeout)); err != nil {
+		return nil, false, err
+	}
+
+	if _, err := conn.Write([]byte("calib\n")); err != nil {
+		return nil, false, fmt.Errorf("キャリブレーション要求の送信に失敗しました: %w", err)
+	}
+
+	data, err := io.ReadAll(conn)
+	if err != nil {
+		return nil, false, fmt.Errorf("キャリブレーション結果の受信に失敗しました: %w", err)
+	}
+
+	var parsed struct {
+		OK bool `json:"ok"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return data, false, fmt.Errorf("キャリブレーション結果の解析に失敗しました: %w", err)
+	}
+
+	return data, parsed.OK, nil
 }
 
 func handleStatus(conn net.Conn) {
@@ -227,45 +286,21 @@ func handleStatus(conn net.Conn) {
 }
 
 const (
-	pythonScriptURL   = "https://raw.githubusercontent.com/Rione/ssl-RACOON-Pi2/refs/heads/master/main.py"
-	pythonScriptFile  = "main.py"
-	httpClientTimeout = 5 * time.Second
+	calibDialTimeout = 5 * time.Second
+	// Generous: the first calibration loads the YOLO model, which can take
+	// several seconds on the robot.
+	calibTimeout = 60 * time.Second
 )
 
-func updateMainPyFromGitHub() error {
-	client := &http.Client{Timeout: httpClientTimeout}
-
-	resp, err := client.Get(pythonScriptURL)
+// cameraWorkDir returns the directory the camera process should run in. The
+// camera package and threshold.json live next to the binary, so the binary's
+// directory is used (falling back to the current working directory).
+func cameraWorkDir() string {
+	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("GitHubからファイルを取得できませんでした: %w", err)
+		return ""
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTPエラー: %d", resp.StatusCode)
-	}
-
-	githubContent, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("レスポンス読み取りエラー: %w", err)
-	}
-
-	localContent, err := os.ReadFile(pythonScriptFile)
-	if err == nil && string(localContent) == string(githubContent) {
-		log.Println("main.pyは最新です。更新の必要はありません。")
-		return nil
-	}
-
-	if err != nil {
-		log.Println("ローカルのmain.pyが見つかりません。新規作成します。")
-	}
-
-	if err := os.WriteFile(pythonScriptFile, githubContent, 0644); err != nil {
-		return fmt.Errorf("ファイル書き込みエラー: %w", err)
-	}
-
-	log.Println("main.pyが正常に更新されました。")
-	return nil
+	return filepath.Dir(exe)
 }
 
 func restartPythonProcess() error {
@@ -277,12 +312,16 @@ func restartPythonProcess() error {
 		pythonCmd.Wait()
 	}
 
-	if err := updateMainPyFromGitHub(); err != nil {
-		log.Printf("main.py更新エラー（ローカルファイルで継続）: %v", err)
+	log.Printf("Pythonプロセスを開始します（board=%s）。", cameraBoard)
+	cmd := exec.Command("python3", "-m", "camera")
+	cmd.Env = append(os.Environ(), "RACOON_BOARD="+cameraBoard)
+	if dir := cameraWorkDir(); dir != "" {
+		cmd.Dir = dir
 	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	log.Println("Pythonプロセスを開始します。")
-	pythonCmd = exec.Command("python3", pythonScriptFile)
+	pythonCmd = cmd
 	if err := pythonCmd.Start(); err != nil {
 		return fmt.Errorf("Pythonプロセス開始エラー: %w", err)
 	}

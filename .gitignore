@@ -8,3 +8,5 @@ ssl-RACOON-Pi2
 /dip_test
 .env
 .DS_Store
+__pycache__/
+*.pyc

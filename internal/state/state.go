@@ -14,6 +14,7 @@ const (
 	Port          = ":9191"
 	UDPRecvPort   = 20011
 	UDPCameraPort = 31133
+	CalibPort     = 31134
 	MulticastAddr = "224.5.69.4"
 	MulticastPort = "16941"
 	PCRecvPort    = 16941

@@ -24,6 +24,22 @@ internal/
   pi4/                 # Pi 4B 専用（UART, go-rpio）
   rock5a/              # Rock5A 専用（SPI, rock5a-gpio-go, sysfs PWM）
 proto/                 # Protobuf 定義・生成コード
+camera/                # カメラ処理（Python）
+  capture/             # ボード別カメラ入力（pi4=Picamera2 / rock5a=V4L2）
+  detect/              # color.py（HSV 検出）, calib.py（YOLO キャリブ）
+  transport/           # UDP 送信・エンコード
+  yolo/                # git submodule: Rione/ssl-YOLO-Detection
+```
+
+## クローン
+
+カメラの YOLO モデルは git submodule（[Rione/ssl-YOLO-Detection](https://github.com/Rione/ssl-YOLO-Detection)）として `camera/yolo/` に含まれます。submodule ごと取得してください。
+
+```bash
+git clone --recurse-submodules https://github.com/Rione/ssl-RACOON-Pi2.git
+
+# 既にクローン済みの場合
+git submodule update --init --recursive
 ```
 
 ## ビルド
@@ -41,6 +57,36 @@ go build -tags rock5a -o spi_test ./cmd/spi_test
 ```
 
 タグ未指定の `go build .` は不可です。
+
+## カメラ
+
+カメラ処理は Python の `camera/` パッケージが担当します。通常運転では軽量な HSV + 輪郭検出のみを行い、検出結果を UDP（ポート 31133）で Go 本体へ送信します。Go 本体は起動時に `python3 -m camera` を実行し、ビルドタグに応じて環境変数 `RACOON_BOARD`（`pi4` / `rock5a`）を渡します。
+
+### ボード別のカメラ入力
+
+| ボード | バックエンド | デバイス |
+| ------ | ------------ | -------- |
+| Pi 4B | Picamera2（MIPI CSI） | Picamera2 既定 |
+| Rock5A | OpenCV V4L2 | `/dev/video11`（既定）。`threshold.json` の `cameraDevice` で上書き可 |
+
+### 依存パッケージ
+
+```bash
+pip install -r camera/requirements.txt
+```
+
+`picamera2` は Pi 4B のみ必要です。`ultralytics`（YOLO）はキャリブレーション時のみ遅延 import されます。
+
+### ボール色キャリブレーション（`/calibballcolor`）
+
+Raspberry Pi 上で常時 YOLO を動かすのは負荷が高いため、YOLO はキャリブレーション時のみ使用します。`GET /calibballcolor` を叩くと、カメラプロセスが 1 フレームを YOLO で推論し、検出したボールのバウンディングボックス中心と上下左右 4 点（計 5 点）から HSV を算出して `threshold.json` を更新します。以降は通常の HSV 検出が新しいしきい値で動作します（プロセス再起動不要）。
+
+```bash
+# ボールをカメラに写した状態で実行
+curl http://<robot>:9191/calibballcolor
+```
+
+成功時はしきい値・バウンディングボックス・サンプル点・プレビュー画像（base64 JPEG）を含む JSON を返します。ボール未検出時は HTTP 400 を返します。
 
 ## 自動アップデート
 
