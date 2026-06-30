@@ -170,6 +170,12 @@ func getLocalIP() string {
 				continue
 			}
 			ip := ipNet.IP.String()
+			// 同じNICのMACアドレスを記録しておく。RAVEN側で各ロボットの基板を
+			// 一意に識別し、モータ個体差の管理に使う。
+			if mac := iface.HardwareAddr.String(); mac != "" {
+				state.MACAddress = mac
+				log.Printf("Local MAC for AI receive: %s (%s)", mac, iface.Name)
+			}
 			log.Printf("Local IP for AI receive: %s (%s)", ip, iface.Name)
 			return ip
 		}

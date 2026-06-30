@@ -8,6 +8,9 @@ message PiToMw {
   required Ball ball = 3;
   // True when running on Rock5A (new robot), false on Raspberry Pi (pi4).
   required bool is_new_robot = 4;
+  // MACアドレス(NIC由来)。各ロボットの基板を一意に識別し、モータ個体差の
+  // 管理に使う。"aa:bb:cc:dd:ee:ff" 形式。取得できない場合は未設定。
+  optional string mac_address = 5;
 }
 
 message Robot_Status {
