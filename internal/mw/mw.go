@@ -59,7 +59,7 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 	minThreshold, maxThreshold string, ballDetectRadius int32, circularityThreshold float32,
 	flWheelSpeed, blWheelSpeed, brWheelSpeed, frWheelSpeed float32) *pb_gen.PiToMw {
 	isNewRobot := state.IsNewRobot
-	return &pb_gen.PiToMw{
+	piToMw := &pb_gen.PiToMw{
 		IsNewRobot: &isNewRobot,
 		RobotsStatus: &pb_gen.Robot_Status{
 			RobotId:                &robotID,
@@ -85,6 +85,12 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 			CircularityThreshold: &circularityThreshold,
 		},
 	}
+	// MACアドレス(NIC由来)が取得できていれば付与する。
+	if state.MACAddress != "" {
+		mac := state.MACAddress
+		piToMw.MacAddress = &mac
+	}
+	return piToMw
 }
 
 func RunServer(done <-chan struct{}, myID uint32) {

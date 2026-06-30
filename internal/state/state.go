@@ -190,6 +190,12 @@ var (
 	// IsNewRobot is true when running on Rock5A (new robot) and false on
 	// Raspberry Pi (pi4). Set by the board-specific registerPlatform.
 	IsNewRobot bool = false
+
+	// MACAddress is the hardware (MAC) address of the active NIC, formatted as
+	// "aa:bb:cc:dd:ee:ff". Used by RAVEN to identify each robot's board for
+	// motor individual-difference management. Empty when it could not be
+	// resolved. Set once at startup alongside the local IP.
+	MACAddress string = ""
 )
 
 type Adjustment struct {
