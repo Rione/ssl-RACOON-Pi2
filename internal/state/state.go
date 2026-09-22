@@ -8,9 +8,6 @@ import (
 )
 
 const (
-	BatteryLowThreshold      = 140
-	BatteryCriticalThreshold = 135
-
 	Port          = ":9191"
 	UDPRecvPort   = 20011
 	UDPCameraPort = 31133
@@ -178,12 +175,12 @@ type ImageResponse struct {
 var ImageResponseData ImageResponse
 
 var (
-	DebugSerial      bool = false
-	DebugReceive     bool = false
-	DebugCamera      bool = false
-	DebugWheelGraph  bool = false
-	DryRun       bool = false
-	VelX1000     bool = false
+	DebugSerial     bool = false
+	DebugReceive    bool = false
+	DebugCamera     bool = false
+	DebugWheelGraph bool = false
+	DryRun          bool = false
+	VelX1000        bool = false
 
 	PowerShutdownMode bool = false
 
@@ -201,6 +198,11 @@ var (
 	// PiToMw and shown in the Robot Status pane. On dev builds it may be
 	// "(devel)"/"unknown". Set once at startup from upgrade.GetVersion().
 	Version string = ""
+
+	//BatteryLowThreshold /BatteryCriticalThreshold はバッテリー電圧のしきい値（0.1V単位）
+	//ボードごとにセル数が違う。（Pi 4B: 4S / Rock5A: 6S）ため、registerPlatform() で設定する。
+	BatteryLowThreshold      int
+	BatteryCriticalThreshold int
 )
 
 type Adjustment struct {

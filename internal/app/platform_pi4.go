@@ -10,6 +10,8 @@ import (
 
 func registerPlatform() {
 	state.IsNewRobot = false
+	state.BatteryLowThreshold = pi4.BatteryLowThreshold
+	state.BatteryCriticalThreshold = pi4.BatteryCriticalThreshold
 	pi4.RegisterLink()
 	receive.SetPlayBallDetectedSound(pi4.PlayBallDetectedSound)
 }

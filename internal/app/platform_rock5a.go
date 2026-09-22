@@ -10,6 +10,8 @@ import (
 
 func registerPlatform() {
 	state.IsNewRobot = true
+	state.BatteryLowThreshold = rock5a.BatteryLowThreshold
+	state.BatteryCriticalThreshold = rock5a.BatteryCriticalThreshold
 	rock5a.RegisterLink()
 	receive.SetPlayBallDetectedSound(rock5a.PlayBallDetectedSound)
 }
