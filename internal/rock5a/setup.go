@@ -305,16 +305,20 @@ func handleBatteryAlarm(led2, button1 *gpio.GPIO, alarmVoltage *int) {
 	log.Printf("BATTERY ALARM (%.1fV)", float32(state.Recvdata.Volt)*0.1)
 
 	for {
-		//電圧が戻ったら解除する
+		// 電圧が戻ったら解除する。ボタンで下げたしきい値と、
+		// API で立てた無効化フラグも元に戻す。
 		if link.BatteryRecovered(state.Recvdata.Volt, *alarmVoltage) {
 			log.Printf("BATTERY ALARM CLEARED (%.1fV)", float32(state.Recvdata.Volt)*0.1)
 			link.ResetBatteryDebounce()
+			*alarmVoltage = state.BatteryLowThreshold
+			state.AlarmIgnore = false
 			setOutput(led2, false)
 			break
 		}
 
+		// 危険域。鳴動を 1 秒ずつに分けて、回復の判定が止まらないようにする。
 		if state.Recvdata.Volt <= uint8(state.BatteryCriticalThreshold) {
-			RingBuzzer(25, 5000*time.Millisecond, 0)
+			RingBuzzer(25, 1000*time.Millisecond, 0)
 			continue
 		}
 
