@@ -8,8 +8,9 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/Rione/ssl-RACOON-Pi2/internal/link"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
-	"github.com/Yuzz1e/rock5a-gpio-go"
+	gpio "github.com/Yuzz1e/rock5a-gpio-go"
 )
 
 const (
@@ -220,7 +221,7 @@ func RunGPIO(done <-chan struct{}) {
 		case <-done:
 			return
 		default:
-			if state.Recvdata.Volt <= uint8(alarmVoltage) {
+			if link.BatteryBelowThreshold(state.Recvdata.Volt, alarmVoltage) {
 				handleBatteryAlarm(led2, button1, &alarmVoltage)
 			} else {
 				ledInterval = handleNormalOperation(led, button1, button2, ledInterval)
@@ -301,9 +302,17 @@ func printDIPStatus() {
 }
 
 func handleBatteryAlarm(led2, button1 *gpio.GPIO, alarmVoltage *int) {
-	log.Println("BATTERY ALARM")
+	log.Printf("BATTERY ALARM (%.1fV)", float32(state.Recvdata.Volt)*0.1)
 
 	for {
+		//電圧が戻ったら解除する
+		if link.BatteryRecovered(state.Recvdata.Volt, *alarmVoltage) {
+			log.Printf("BATTERY ALARM CLEARED (%.1fV)", float32(state.Recvdata.Volt)*0.1)
+			link.ResetBatteryDebounce()
+			setOutput(led2, false)
+			break
+		}
+
 		if state.Recvdata.Volt <= uint8(state.BatteryCriticalThreshold) {
 			RingBuzzer(25, 5000*time.Millisecond, 0)
 			continue
@@ -319,6 +328,7 @@ func handleBatteryAlarm(led2, button1 *gpio.GPIO, alarmVoltage *int) {
 		if isPressed(button1) || state.AlarmIgnore {
 			log.Println("BATTERY ALARM IGNORED")
 			*alarmVoltage = state.BatteryCriticalThreshold
+			link.ResetBatteryDebounce()
 			playAlarmDismissSound()
 			break
 		}
