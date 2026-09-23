@@ -5,15 +5,19 @@ package rock5a
 const DefaultHostname = "DietPi\n"
 
 const (
-	SPIDevPath     = "/dev/spidev4.0"
-	SPISpeedHz     = 1_000_000
-	SPIFrameSize   = 20
-	SPIPayloadSize = 18
-	SPIRecvSize    = 11
-	SPIFrameHeader = 0xFF
-	SPIFrameFooter = 0xAA
-	SPIPeriodMs    = 8
+	SPIDevPath      = "/dev/spidev4.0"
+	SPISpeedHz      = 1_000_000
+	SPIFrameSize    = 20
+	SPIPayloadSize  = 18
+	SPIRecvSize     = 11
+	SPIFrameHeader  = 0xFF
+	SPIFrameFooter  = 0xAA
+	SPIPeriodMs     = 8
 	WheelDiameterMm = 60.0
+
+	//電圧の読み取り値が揺れる為、誤ってアラームが鳴らないよう、閾値を低めにしている
+	BatteryLowThreshold      = 200 // 6s:20V
+	BatteryCriticalThreshold = 190 // 6s:19V
 )
 
 const (

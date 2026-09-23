@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/Rione/ssl-RACOON-Pi2/internal/link"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/state"
 	"github.com/Rione/ssl-RACOON-Pi2/internal/util"
 	"github.com/stianeikeland/go-rpio/v4"
@@ -153,7 +154,7 @@ func RunGPIO(done <-chan struct{}) {
 		case <-done:
 			return
 		default:
-			if state.Recvdata.Volt <= uint8(alarmVoltage) {
+			if link.BatteryBelowThreshold(state.Recvdata.Volt, alarmVoltage) {
 				handleBatteryAlarm(led2, button1, &alarmVoltage)
 			} else {
 				ledInterval = handleNormalOperation(led, button1, button2, ledInterval)
@@ -222,11 +223,23 @@ func printDIPStatus() {
 }
 
 func handleBatteryAlarm(led2, button1 rpio.Pin, alarmVoltage *int) {
-	log.Println("BATTERY ALARM")
+	log.Printf("BATTERY ALARM (%.1fV)", float32(state.Recvdata.Volt)*0.1)
 
 	for {
+		// 電圧が戻ったら解除する。ボタンで下げたしきい値と、
+		// API で立てた無効化フラグも元に戻す。
+		if link.BatteryRecovered(state.Recvdata.Volt, *alarmVoltage) {
+			log.Printf("BATTERY ALARM CLEARED (%.1fV)", float32(state.Recvdata.Volt)*0.1)
+			link.ResetBatteryDebounce()
+			*alarmVoltage = state.BatteryLowThreshold
+			state.AlarmIgnore = false
+			led2.Low()
+			break
+		}
+
+		// 危険域。鳴動を 1 秒ずつに分けて、回復の判定が止まらないようにする。
 		if state.Recvdata.Volt <= uint8(state.BatteryCriticalThreshold) {
-			RingBuzzer(25, 5000*time.Millisecond, 0)
+			RingBuzzer(25, 1000*time.Millisecond, 0)
 			continue
 		}
 
@@ -240,6 +253,7 @@ func handleBatteryAlarm(led2, button1 rpio.Pin, alarmVoltage *int) {
 		if button1.Read()^1 == rpio.High || state.AlarmIgnore {
 			log.Println("BATTERY ALARM IGNORED")
 			*alarmVoltage = state.BatteryCriticalThreshold
+			link.ResetBatteryDebounce()
 			playAlarmDismissSound()
 			break
 		}

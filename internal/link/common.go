@@ -104,16 +104,39 @@ func PrepareHardwareTx(sendbytes []byte) []byte {
 	return out
 }
 
+// CheckBatteryStatus はステータス API に出すエラー表示を更新する。
+// 電圧は 1V 刻みで跳ねるため、一定時間続いたときだけ切り替え、
+// 十分に回復したら解除する（以前は一度立つと再起動まで消えなかった）。
 func CheckBatteryStatus() {
-	if state.Recvdata.Volt < uint8(state.BatteryCriticalThreshold) {
-		state.IsRobotError = true
-		state.RobotErrorCode = 2
-		state.RobotErrorMessage = "バッテリ電圧異常(回路故障の可能性)"
-	} else if state.Recvdata.Volt < uint8(state.BatteryLowThreshold) {
-		state.IsRobotError = true
-		state.RobotErrorCode = 2
-		state.RobotErrorMessage = "バッテリ電圧異常"
+	volt := state.Recvdata.Volt
+
+	switch {
+	case statusCriticalDebouncer.below(volt, state.BatteryCriticalThreshold):
+		setBatteryError(volt, "バッテリ電圧異常(回路故障の可能性)")
+	case statusLowDebouncer.below(volt, state.BatteryLowThreshold):
+		setBatteryError(volt, "バッテリ電圧異常")
+	case statusLowDebouncer.recovered(volt, state.BatteryLowThreshold):
+		clearBatteryError(volt)
 	}
+}
+
+func setBatteryError(volt uint8, message string) {
+	if !state.IsRobotError || state.RobotErrorMessage != message {
+		log.Printf("Battery error: %s (%.1fV)", message, float32(volt)*0.1)
+	}
+	state.IsRobotError = true
+	state.RobotErrorCode = 2
+	state.RobotErrorMessage = message
+}
+
+func clearBatteryError(volt uint8) {
+	if !state.IsRobotError {
+		return
+	}
+	log.Printf("Battery error cleared (%.1fV)", float32(volt)*0.1)
+	state.IsRobotError = false
+	state.RobotErrorCode = 0
+	state.RobotErrorMessage = ""
 }
 
 func FinishLinkCycle() {
