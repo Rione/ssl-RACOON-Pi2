@@ -82,6 +82,8 @@ func processSPICommunication(conn spi.Conn) {
 		state.BlWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BlWheelSpeed)
 		state.BrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.BrWheelSpeed)
 		state.FrWheelSpeedRadS = motorRawToWheelMS(state.Recvdata.FrWheelSpeed)
+		state.IMU = imuFromRecv(state.Recvdata)
+		state.HasIMU = true
 
 		if state.DebugWheelGraph {
 			wheelgraph.Record(
@@ -98,13 +100,15 @@ func processSPICommunication(conn spi.Conn) {
 			log.Printf("[SPI RX] FRAME ERROR: %v", frameErr)
 			log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
 		} else {
-			log.Printf("[SPI RX] Raw: % 02X", rx[1:1+SPIRecvSize])
+			log.Printf("[SPI RX] Raw: % 02X", rx[1:1+SPIPayloadSize])
 			log.Printf("[SPI RX] Volt: %d (%.1fV), SensorInfo: 0b%08b, CapPower: %d",
 				state.Recvdata.Volt, float32(state.Recvdata.Volt)*0.1, state.Recvdata.SensorInformation, state.Recvdata.CapPower)
 			log.Printf("[SPI RX] Wheel(raw) FL: %d, BL: %d, BR: %d, FR: %d",
 				state.Recvdata.FlWheelSpeed, state.Recvdata.BlWheelSpeed, state.Recvdata.BrWheelSpeed, state.Recvdata.FrWheelSpeed)
 			log.Printf("[SPI RX] Wheel(m/s) FL: %.3f, BL: %.3f, BR: %.3f, FR: %.3f",
 				state.FlWheelSpeedRadS, state.BlWheelSpeedRadS, state.BrWheelSpeedRadS, state.FrWheelSpeedRadS)
+			log.Printf("[SPI RX] IMU accel=(%.3f, %.3f)g yawRate=%.3frad/s yaw=%.4frad",
+				state.IMU.AccelX, state.IMU.AccelY, state.IMU.YawRate, state.IMU.Yaw)
 			log.Printf("[SPI RX] full (%dB): % x", SPIFrameSize, rx)
 		}
 		log.Printf("[SPI TX] full (%dB): % x", SPIFrameSize, tx)
@@ -125,19 +129,6 @@ func resolveSPIRxFrame(window []byte) (offset int, err error) {
 		return 0, fmt.Errorf("no valid frame in %d-byte window", len(window))
 	}
 	return offset, nil
-}
-
-func parseRecvBufAt(rx []byte, frameOffset int) state.RecvData {
-	off := frameOffset + 1
-	return state.RecvData{
-		Volt:              rx[off+0],
-		SensorInformation: rx[off+1],
-		CapPower:          rx[off+2],
-		FlWheelSpeed:      int16(rx[off+3]) | int16(rx[off+4])<<8,
-		BlWheelSpeed:      int16(rx[off+5]) | int16(rx[off+6])<<8,
-		BrWheelSpeed:      int16(rx[off+7]) | int16(rx[off+8])<<8,
-		FrWheelSpeed:      int16(rx[off+9]) | int16(rx[off+10])<<8,
-	}
 }
 
 func motorRawToWheelMS(raw int16) float32 {

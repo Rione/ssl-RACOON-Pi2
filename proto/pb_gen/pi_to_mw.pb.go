@@ -33,7 +33,10 @@ type PiToMw struct {
 	MacAddress *string `protobuf:"bytes,5,opt,name=mac_address,json=macAddress" json:"mac_address,omitempty"`
 	// RACOON-Pi2 のバージョン (例 "v6.2.3")。開発ビルドでは "(devel)"/"unknown"
 	// などになる場合がある。RAVEN の Robot Status ペインで表示する。
-	Version       *string `protobuf:"bytes,6,opt,name=version" json:"version,omitempty"`
+	Version *string `protobuf:"bytes,6,opt,name=version" json:"version,omitempty"`
+	// 7 は RAVEN-Wing の estimated_pose 用に予約 (RACOON-Pi2 は自己位置推定を持たない)。
+	// MainBoard から SPI で受け取った IMU の値 (Rock5A のみ)。RAVEN-Wing と同じ番号・型。
+	Imu           *Imu_Status `protobuf:"bytes,8,opt,name=imu" json:"imu,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -110,6 +113,81 @@ func (x *PiToMw) GetVersion() string {
 	return ""
 }
 
+func (x *PiToMw) GetImu() *Imu_Status {
+	if x != nil {
+		return x.Imu
+	}
+	return nil
+}
+
+type Imu_Status struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccelX        *float32               `protobuf:"fixed32,1,req,name=accel_x,json=accelX" json:"accel_x,omitempty"`    // [g]
+	AccelY        *float32               `protobuf:"fixed32,2,req,name=accel_y,json=accelY" json:"accel_y,omitempty"`    // [g]
+	YawRate       *float32               `protobuf:"fixed32,3,req,name=yaw_rate,json=yawRate" json:"yaw_rate,omitempty"` // [rad/s]
+	Yaw           *float32               `protobuf:"fixed32,4,req,name=yaw" json:"yaw,omitempty"`                        // [rad] MainBoard 起動時姿勢を0とした相対角
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Imu_Status) Reset() {
+	*x = Imu_Status{}
+	mi := &file_pi_to_mw_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Imu_Status) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Imu_Status) ProtoMessage() {}
+
+func (x *Imu_Status) ProtoReflect() protoreflect.Message {
+	mi := &file_pi_to_mw_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Imu_Status.ProtoReflect.Descriptor instead.
+func (*Imu_Status) Descriptor() ([]byte, []int) {
+	return file_pi_to_mw_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Imu_Status) GetAccelX() float32 {
+	if x != nil && x.AccelX != nil {
+		return *x.AccelX
+	}
+	return 0
+}
+
+func (x *Imu_Status) GetAccelY() float32 {
+	if x != nil && x.AccelY != nil {
+		return *x.AccelY
+	}
+	return 0
+}
+
+func (x *Imu_Status) GetYawRate() float32 {
+	if x != nil && x.YawRate != nil {
+		return *x.YawRate
+	}
+	return 0
+}
+
+func (x *Imu_Status) GetYaw() float32 {
+	if x != nil && x.Yaw != nil {
+		return *x.Yaw
+	}
+	return 0
+}
+
 type Robot_Status struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	RobotId                *uint32                `protobuf:"varint,1,req,name=robot_id,json=robotId" json:"robot_id,omitempty"`
@@ -128,7 +206,7 @@ type Robot_Status struct {
 
 func (x *Robot_Status) Reset() {
 	*x = Robot_Status{}
-	mi := &file_pi_to_mw_proto_msgTypes[1]
+	mi := &file_pi_to_mw_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -140,7 +218,7 @@ func (x *Robot_Status) String() string {
 func (*Robot_Status) ProtoMessage() {}
 
 func (x *Robot_Status) ProtoReflect() protoreflect.Message {
-	mi := &file_pi_to_mw_proto_msgTypes[1]
+	mi := &file_pi_to_mw_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -153,7 +231,7 @@ func (x *Robot_Status) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Robot_Status.ProtoReflect.Descriptor instead.
 func (*Robot_Status) Descriptor() ([]byte, []int) {
-	return file_pi_to_mw_proto_rawDescGZIP(), []int{1}
+	return file_pi_to_mw_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Robot_Status) GetRobotId() uint32 {
@@ -237,7 +315,7 @@ type Ball_Status struct {
 
 func (x *Ball_Status) Reset() {
 	*x = Ball_Status{}
-	mi := &file_pi_to_mw_proto_msgTypes[2]
+	mi := &file_pi_to_mw_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -249,7 +327,7 @@ func (x *Ball_Status) String() string {
 func (*Ball_Status) ProtoMessage() {}
 
 func (x *Ball_Status) ProtoReflect() protoreflect.Message {
-	mi := &file_pi_to_mw_proto_msgTypes[2]
+	mi := &file_pi_to_mw_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -262,7 +340,7 @@ func (x *Ball_Status) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ball_Status.ProtoReflect.Descriptor instead.
 func (*Ball_Status) Descriptor() ([]byte, []int) {
-	return file_pi_to_mw_proto_rawDescGZIP(), []int{2}
+	return file_pi_to_mw_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Ball_Status) GetIsBallExit() bool {
@@ -298,7 +376,7 @@ type Ball struct {
 
 func (x *Ball) Reset() {
 	*x = Ball{}
-	mi := &file_pi_to_mw_proto_msgTypes[3]
+	mi := &file_pi_to_mw_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -310,7 +388,7 @@ func (x *Ball) String() string {
 func (*Ball) ProtoMessage() {}
 
 func (x *Ball) ProtoReflect() protoreflect.Message {
-	mi := &file_pi_to_mw_proto_msgTypes[3]
+	mi := &file_pi_to_mw_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -323,7 +401,7 @@ func (x *Ball) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ball.ProtoReflect.Descriptor instead.
 func (*Ball) Descriptor() ([]byte, []int) {
-	return file_pi_to_mw_proto_rawDescGZIP(), []int{3}
+	return file_pi_to_mw_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Ball) GetMinThreshold() string {
@@ -358,7 +436,7 @@ var File_pi_to_mw_proto protoreflect.FileDescriptor
 
 const file_pi_to_mw_proto_rawDesc = "" +
 	"\n" +
-	"\x0epi_to_mw.proto\"\xe3\x01\n" +
+	"\x0epi_to_mw.proto\"\x82\x02\n" +
 	"\x06PiToMw\x122\n" +
 	"\rrobots_status\x18\x01 \x02(\v2\r.Robot_StatusR\frobotsStatus\x12-\n" +
 	"\vball_status\x18\x02 \x02(\v2\f.Ball_StatusR\n" +
@@ -368,7 +446,14 @@ const file_pi_to_mw_proto_rawDesc = "" +
 	"isNewRobot\x12\x1f\n" +
 	"\vmac_address\x18\x05 \x01(\tR\n" +
 	"macAddress\x12\x18\n" +
-	"\aversion\x18\x06 \x01(\tR\aversion\"\x9f\x03\n" +
+	"\aversion\x18\x06 \x01(\tR\aversion\x12\x1d\n" +
+	"\x03imu\x18\b \x01(\v2\v.Imu_StatusR\x03imu\"k\n" +
+	"\n" +
+	"Imu_Status\x12\x17\n" +
+	"\aaccel_x\x18\x01 \x02(\x02R\x06accelX\x12\x17\n" +
+	"\aaccel_y\x18\x02 \x02(\x02R\x06accelY\x12\x19\n" +
+	"\byaw_rate\x18\x03 \x02(\x02R\ayawRate\x12\x10\n" +
+	"\x03yaw\x18\x04 \x02(\x02R\x03yaw\"\x9f\x03\n" +
 	"\fRobot_Status\x12\x19\n" +
 	"\brobot_id\x18\x01 \x02(\rR\arobotId\x123\n" +
 	"\x16is_detect_photo_sensor\x18\x02 \x02(\bR\x13isDetectPhotoSensor\x129\n" +
@@ -404,22 +489,24 @@ func file_pi_to_mw_proto_rawDescGZIP() []byte {
 	return file_pi_to_mw_proto_rawDescData
 }
 
-var file_pi_to_mw_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_pi_to_mw_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_pi_to_mw_proto_goTypes = []any{
 	(*PiToMw)(nil),       // 0: PiToMw
-	(*Robot_Status)(nil), // 1: Robot_Status
-	(*Ball_Status)(nil),  // 2: Ball_Status
-	(*Ball)(nil),         // 3: Ball
+	(*Imu_Status)(nil),   // 1: Imu_Status
+	(*Robot_Status)(nil), // 2: Robot_Status
+	(*Ball_Status)(nil),  // 3: Ball_Status
+	(*Ball)(nil),         // 4: Ball
 }
 var file_pi_to_mw_proto_depIdxs = []int32{
-	1, // 0: PiToMw.robots_status:type_name -> Robot_Status
-	2, // 1: PiToMw.ball_status:type_name -> Ball_Status
-	3, // 2: PiToMw.ball:type_name -> Ball
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 0: PiToMw.robots_status:type_name -> Robot_Status
+	3, // 1: PiToMw.ball_status:type_name -> Ball_Status
+	4, // 2: PiToMw.ball:type_name -> Ball
+	1, // 3: PiToMw.imu:type_name -> Imu_Status
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_pi_to_mw_proto_init() }
@@ -433,7 +520,7 @@ func file_pi_to_mw_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pi_to_mw_proto_rawDesc), len(file_pi_to_mw_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

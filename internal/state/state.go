@@ -82,7 +82,31 @@ type RecvData struct {
 	FrWheelSpeed      int16
 	Footer            uint8
 	Reserved          uint8
+
+	// IMU の生値 (Rock5A のみ。MainBoard が SPI で送ってくる)。
+	// 物理量への換算は IMU を参照。
+	AccelXRaw  int16 // ×1000 [g]
+	AccelYRaw  int16 // ×1000 [g]
+	YawRateRaw int16 // ×900 [rad/s]
+	YawRaw     int16 // ×10000 [rad]
 }
+
+// IMUData は MainBoard の IMU (LSM6DSO32) の値を物理量に直したもの。
+type IMUData struct {
+	AccelX  float32 // 機体座標系の加速度X [g] (フィルタ無しの生値)
+	AccelY  float32 // 機体座標系の加速度Y [g] (フィルタ無しの生値)
+	YawRate float32 // ジャイロZ軸の角速度 [rad/s]
+	// Yaw は Madgwick フィルタによる姿勢角 [rad]。磁気センサが無いため
+	// 絶対方位ではなく、MainBoard 起動時の姿勢を 0 とした相対角 (-π〜π)。
+	Yaw float32
+}
+
+var (
+	// IMU は直近に受信した IMU の値。HasIMU は IMU を送ってくるボード
+	// (Rock5A) で 1 度でも有効なフレームを受信したかどうか。
+	IMU    IMUData
+	HasIMU bool
+)
 
 var (
 	FlWheelSpeedRadS float32

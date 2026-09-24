@@ -95,6 +95,16 @@ func createStatus(robotID uint32, detectPhotoSensor, detectDribbler, isNewDribbl
 		version := state.Version
 		piToMw.Version = &version
 	}
+	// IMU を受信できていれば付与する (Rock5A のみ)。
+	if state.HasIMU {
+		imu := state.IMU
+		piToMw.Imu = &pb_gen.Imu_Status{
+			AccelX:  &imu.AccelX,
+			AccelY:  &imu.AccelY,
+			YawRate: &imu.YawRate,
+			Yaw:     &imu.Yaw,
+		}
+	}
 	return piToMw
 }
 
