@@ -206,7 +206,7 @@ sudo raspi-config
 
 ## Rock5A（SPI）
 
-Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz, Mode0）です。送受信フレーム長は **20 バイト**（ヘッダ `0xFF` + ペイロード 18 バイト + フッタ `0xAA`）。受信ペイロードの先頭 11 バイトが有効データで、続く 7 バイトはパディング（`0x00`）です。ヘッダ・フッタ・パディングが不正なフレームは破棄されます。
+Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz, Mode0）です。送受信フレーム長は **21 バイト**（ヘッダ `0xFF` + ペイロード 19 バイト + フッタ `0xAA`）、周期は **4ms（250Hz）** です。受信ペイロードは 19 バイト全てが有効データ（電圧・センサ・キャパシタ・車輪速度 ×4・IMU の加速度 X/Y・角速度 yaw・姿勢角 yaw）で、送信ペイロードは先頭 18 バイトが指令、末尾 1 バイトは予約（`0x00`）です。ヘッダ・フッタが不正なフレームは破棄されます。レイアウトの詳細は ssl-RAVEN-Wing の `SPI_PROTOCOL.md` を参照してください。受信した IMU の値は PiToMw の `imu` フィールドで RAVEN に送られます。
 
 ### PIN ASSIGN / ピン配置
 
@@ -228,11 +228,11 @@ Radxa Rock5A 向け。STM との通信は SPI Master（`/dev/spidev4.0` @ 1 MHz,
 ### SPI 診断 (`spi_test`)
 
 ```bash
-sudo /root/spi_test -interval 8ms          # 本番と同じ 125Hz（SignalReceived のみ、EmgStop=0）
-sudo /root/spi_test -once                  # 1 回送信（TX 20 バイト）
-sudo /root/spi_test -interval 8ms -velx 500 -charge   # 走行テスト（DoCharge も付与）
+sudo /root/spi_test -interval 4ms          # 本番と同じ 250Hz（SignalReceived のみ、EmgStop=0）
+sudo /root/spi_test -once                  # 1 回送信（TX 21 バイト）
+sudo /root/spi_test -interval 4ms -velx 500 -charge   # 走行テスト（DoCharge も付与）
 sudo /root/spi_test -emgstop               # 起動直後 idle 相当（EmgStop=1、走行不可）
-sudo /root/spi_test -interval 8ms -mismatch-only   # NG のみ表示
+sudo /root/spi_test -interval 4ms -mismatch-only   # NG のみ表示
 # Ctrl+C で OK/NG パケット統計を表示
 ```
 

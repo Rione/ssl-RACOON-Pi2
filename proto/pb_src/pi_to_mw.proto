@@ -14,6 +14,16 @@ message PiToMw {
   // RACOON-Pi2 のバージョン (例 "v6.2.3")。開発ビルドでは "(devel)"/"unknown"
   // などになる場合がある。RAVEN の Robot Status ペインで表示する。
   optional string version = 6;
+  // 7 は RAVEN-Wing の estimated_pose 用に予約 (RACOON-Pi2 は自己位置推定を持たない)。
+  // MainBoard から SPI で受け取った IMU の値 (Rock5A のみ)。RAVEN-Wing と同じ番号・型。
+  optional Imu_Status imu = 8;
+}
+
+message Imu_Status {
+  required float accel_x = 1;  // [g]
+  required float accel_y = 2;  // [g]
+  required float yaw_rate = 3; // [rad/s]
+  required float yaw = 4;      // [rad] MainBoard 起動時姿勢を0とした相対角
 }
 
 message Robot_Status {

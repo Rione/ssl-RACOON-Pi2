@@ -2,9 +2,10 @@
 
 // SPI送受信テスト用ツール（Rock5A Master → ロボットMCU Slave）
 //
-// 本番 racoon-pi2-rock5a と同じ 20 バイト TX/RX レイアウト。
-// ヘッダ 0xFF + 18 バイトペイロード + フッタ 0xAA。
-// RX は先頭 11 バイトが有効データ、続く 7 バイトはパディング（0x00）。
+// 本番 racoon-pi2-rock5a と同じ 21 バイト TX/RX レイアウト。
+// ヘッダ 0xFF + 19 バイトペイロード + フッタ 0xAA。
+// RX は 19 バイト全てが有効データ（車輪速度 + IMU）。
+// TX は先頭 18 バイトが指令、末尾 1 バイトは予約（0x00）。
 //
 // ビルド:
 //
@@ -13,12 +14,12 @@
 // 実行例:
 //
 //	sudo ./spi_test                          # 1秒間隔で連続送信
-//	sudo ./spi_test -interval 8ms            # 本番と同じ 125Hz
+//	sudo ./spi_test -interval 4ms            # 本番と同じ 250Hz
 //	sudo ./spi_test -count 10 -velx 500      # VelX=500mm/s を10回送信
 //	sudo ./spi_test -once -kick 50 -dribble 30
 //	sudo ./spi_test -sweep -interval 16ms   # VelX: -1000→0→1000→0→-1000 を繰り返し
 //	sudo ./spi_test -sweep -mismatch-only   # フレームずれ時のみ表示
-//	sudo ./spi_test -pattern -once           # FF 01 02 ... 12 AA の固定パターン
+//	sudo ./spi_test -pattern -once           # FF 01 02 ... 13 AA の固定パターン
 //
 // Ctrl+C 終了時に OK/NG パケット数の統計を表示する。
 package main
@@ -42,9 +43,9 @@ import (
 const (
 	spiDevPath     = "/dev/spidev4.0"
 	spiSpeedHz     = 1_000_000
-	spiFrameSize   = 20
-	spiPayloadSize = 18
-	spiRecvSize    = 11
+	spiFrameSize   = 21
+	spiPayloadSize = 19
+	spiCmdSize     = 18 // TX のうち指令が入る先頭バイト数。残りは予約
 	spiFrameHeader = 0xFF
 	spiFrameFooter = 0xAA
 )
@@ -55,7 +56,7 @@ const (
 	infoSignalReceived = 0b00100000
 )
 
-// sendFrame は本番 SendStruct と同じ 18 バイトペイロード（LittleEndian）
+// sendFrame は本番 SendPayload と同じ 18 バイトの指令（LittleEndian）
 type sendFrame struct {
 	VelX          int16
 	VelY          int16
@@ -71,7 +72,7 @@ type sendFrame struct {
 	Informations  uint8
 }
 
-// recvFrame は本番 SPI 受信と同じ先頭 11 バイト（リトルエンディアン）
+// recvFrame は本番 SPI 受信と同じ 19 バイトペイロード（リトルエンディアン）
 type recvFrame struct {
 	Volt              uint8
 	SensorInformation uint8
@@ -80,6 +81,10 @@ type recvFrame struct {
 	BlWheelSpeed      int16
 	BrWheelSpeed      int16
 	FrWheelSpeed      int16
+	AccelX            int16 // ×1000 [g]
+	AccelY            int16 // ×1000 [g]
+	YawRate           int16 // ×900 [rad/s]
+	Yaw               int16 // ×10000 [rad]
 }
 
 // velXSweep は VelX を -max → 0 → max → 0 → -max と三角波スイープする
@@ -172,7 +177,7 @@ func main() {
 	sweepMax := flag.Int("sweep-max", 1000, "スイープ時のVelX最大絶対値 [mm/s]")
 	sweepStep := flag.Int("sweep-step", 100, "スイープ時のVelX刻み幅 [mm/s]")
 	mismatchOnly := flag.Bool("mismatch-only", false, "受信フレームずれ(NG)時のみ詳細を表示")
-	pattern := flag.Bool("pattern", false, "固定テストパターン送信 (255 01 02 ... 18 170 = FF + 1..18 + AA)")
+	pattern := flag.Bool("pattern", false, "固定テストパターン送信 (255 01 02 ... 19 170 = FF + 1..19 + AA)")
 
 	flag.Parse()
 
@@ -195,7 +200,7 @@ func main() {
 		log.Fatalf("Connect: %v", err)
 	}
 
-	log.Printf("SPI test start: dev=%s speed=%dHz mode=0 frame=%dB recv=%dB", *dev, *hz, spiFrameSize, spiRecvSize)
+	log.Printf("SPI test start: dev=%s speed=%dHz mode=0 frame=%dB payload=%dB", *dev, *hz, spiFrameSize, spiPayloadSize)
 	if *sweep {
 		log.Printf("Sweep mode: VelX %d → 0 → %d → 0 → %d (step %d)", -*sweepMax, *sweepMax, -*sweepMax, *sweepStep)
 	}
@@ -203,7 +208,7 @@ func main() {
 		log.Println("Mismatch-only mode: NG frames only")
 	}
 	if *pattern {
-		log.Println("Pattern mode: TX = FF 01 02 03 ... 12 AA (decimal: 255 1..18 170)")
+		log.Println("Pattern mode: TX = FF 01 02 03 ... 13 AA (decimal: 255 1..19 170)")
 	}
 
 	sig := make(chan os.Signal, 1)
@@ -323,8 +328,8 @@ func buildFrame(velX, velY, velAng, dribble, kick, chip, camX, camY int, charge,
 		log.Fatalf("binary.Write: %v", err)
 	}
 	payload := buf.Bytes()
-	if len(payload) != spiPayloadSize {
-		log.Fatalf("payload size: got %d bytes, want %d", len(payload), spiPayloadSize)
+	if len(payload) != spiCmdSize {
+		log.Fatalf("payload size: got %d bytes, want %d", len(payload), spiCmdSize)
 	}
 
 	tx := make([]byte, spiFrameSize)
@@ -343,11 +348,6 @@ func validateSPIFrame(rx []byte) error {
 	}
 	if rx[spiFrameSize-1] != spiFrameFooter {
 		return fmt.Errorf("footer: expected %02x, got %02x", spiFrameFooter, rx[spiFrameSize-1])
-	}
-	for i := 1 + spiRecvSize; i < spiFrameSize-1; i++ {
-		if rx[i] != 0 {
-			return fmt.Errorf("padding[%d]: expected 00, got %02x", i, rx[i])
-		}
 	}
 	return nil
 }
@@ -374,13 +374,13 @@ func printPatternResult(n int, tx, rx []byte, frameErr error) {
 
 func printResult(n int, tx, rx []byte, frameErr error) {
 	var recv recvFrame
-	if err := binary.Read(bytes.NewReader(rx[1:1+spiRecvSize]), binary.LittleEndian, &recv); err != nil {
+	if err := binary.Read(bytes.NewReader(rx[1:1+spiPayloadSize]), binary.LittleEndian, &recv); err != nil {
 		log.Printf("[%d] RX parse error: %v", n, err)
 		return
 	}
 
 	var sent sendFrame
-	_ = binary.Read(bytes.NewReader(tx[1:1+spiPayloadSize]), binary.LittleEndian, &sent)
+	_ = binary.Read(bytes.NewReader(tx[1:1+spiCmdSize]), binary.LittleEndian, &sent)
 
 	status := "OK"
 	if frameErr != nil {
@@ -393,6 +393,8 @@ func printResult(n int, tx, rx []byte, frameErr error) {
 	fmt.Printf("     RX volt=%d (%.1fV) sensor=0b%08b cap=%d wheels=(%d,%d,%d,%d)\n",
 		recv.Volt, float32(recv.Volt)*0.1, recv.SensorInformation, recv.CapPower,
 		recv.FlWheelSpeed, recv.BlWheelSpeed, recv.BrWheelSpeed, recv.FrWheelSpeed)
+	fmt.Printf("     RX imu accel=(%.3f,%.3f)g yawRate=%.3frad/s yaw=%.4frad\n",
+		float32(recv.AccelX)/1000, float32(recv.AccelY)/1000, float32(recv.YawRate)/900, float32(recv.Yaw)/10000)
 	fmt.Printf("     TX raw (%dB): % x\n", len(tx), tx)
 	fmt.Printf("     RX raw (%dB): % x\n", len(rx), rx)
 	if frameErr != nil {
