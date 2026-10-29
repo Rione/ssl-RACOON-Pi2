@@ -26,6 +26,22 @@ func CleanupBoard() {
 	rpio.Close()
 }
 
+// pullUpSettleTime は内部プルアップを有効にしてからピンを読むまでの待ち時間。
+// PullUp() の直後はピンの浮遊容量がまだ充電されておらず Low に見えることがある。
+// ボタンと DIP は Low = ON なので、そのまま読むと電源投入直後に
+// 「押されている」「ON になっている」と誤判定する (config.txt の gpio=...=ip,pu が無い場合)。
+const pullUpSettleTime = 1 * time.Millisecond
+
+// setupPullUpInputs はピンを入力 + 内部プルアップにし、電位が上がるまで待つ。
+// 戻った後は Read() して良い。
+func setupPullUpInputs(pins ...rpio.Pin) {
+	for _, pin := range pins {
+		pin.Input()
+		pin.PullUp()
+	}
+	time.Sleep(pullUpSettleTime)
+}
+
 func CheckInitialButtonState() bool {
 	if err := rpio.Open(); err != nil {
 		log.Fatal("Error: ", err)
@@ -33,8 +49,7 @@ func CheckInitialButtonState() bool {
 	defer rpio.Close()
 
 	button1 := rpio.Pin(PIN_BUTTON1)
-	button1.Input()
-	button1.PullUp()
+	setupPullUpInputs(button1)
 
 	return button1.Read()^1 == rpio.High
 }
@@ -86,8 +101,7 @@ func HandleLocalUserMode() bool {
 	time.Sleep(1000 * time.Millisecond)
 
 	button1 := rpio.Pin(PIN_BUTTON1)
-	button1.Input()
-	button1.PullUp()
+	setupPullUpInputs(button1)
 
 	if button1.Read()^1 == rpio.High {
 		state.IsControlByRobotMode = true
@@ -106,17 +120,10 @@ func HandleLocalUserMode() bool {
 
 func ReadRobotIDFromDIP() int {
 	dip1 := rpio.Pin(PIN_DIP1)
-	dip1.Input()
-	dip1.PullUp()
 	dip2 := rpio.Pin(PIN_DIP2)
-	dip2.Input()
-	dip2.PullUp()
 	dip3 := rpio.Pin(PIN_DIP3)
-	dip3.Input()
-	dip3.PullUp()
 	dip4 := rpio.Pin(PIN_DIP4)
-	dip4.Input()
-	dip4.PullUp()
+	setupPullUpInputs(dip1, dip2, dip3, dip4)
 
 	fmt.Println("DIP1:", dip1.Read()^1)
 	fmt.Println("DIP2:", dip2.Read()^1)
@@ -137,11 +144,8 @@ func RunGPIO(done <-chan struct{}) {
 	led2.Output()
 
 	button1 := rpio.Pin(PIN_BUTTON1)
-	button1.Input()
-	button1.PullUp()
 	button2 := rpio.Pin(PIN_BUTTON2)
-	button2.Input()
-	button2.PullUp()
+	setupPullUpInputs(button1, button2)
 
 	playStartupMelody()
 	printDIPStatus()
@@ -201,17 +205,10 @@ func playStartupMelody() {
 
 func printDIPStatus() {
 	dip1 := rpio.Pin(PIN_DIP1)
-	dip1.Input()
-	dip1.PullUp()
 	dip2 := rpio.Pin(PIN_DIP2)
-	dip2.Input()
-	dip2.PullUp()
 	dip3 := rpio.Pin(PIN_DIP3)
-	dip3.Input()
-	dip3.PullUp()
 	dip4 := rpio.Pin(PIN_DIP4)
-	dip4.Input()
-	dip4.PullUp()
+	setupPullUpInputs(dip1, dip2, dip3, dip4)
 
 	fmt.Println("DIP1:", dip1.Read()^1)
 	fmt.Println("DIP2:", dip2.Read()^1)
