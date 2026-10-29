@@ -146,11 +146,22 @@ func openInputGPIO(bank, port, pin int) (*gpio.GPIO, error) {
 	return g, nil
 }
 
+// pullUpSettleTime は内部プルアップを有効にしてからピンを読むまでの待ち時間。
+// SetPull 直後はピンの浮遊容量がまだ充電されておらず Low に見えることがあり、
+// DIP は Low = ON なので電源投入直後に誤った ID を読んでしまう。
+const pullUpSettleTime = 1 * time.Millisecond
+
+// openDIPInputGPIO はピンを内部プルアップ付きの入力として開き、電位が上がるまで待つ。
 func openDIPInputGPIO(bank, port, pin int) (*gpio.GPIO, error) {
 	if err := gpio.SetPull(bank, rune('A'+port), pin, gpio.PullUp); err != nil {
 		return nil, err
 	}
-	return openInputGPIO(bank, port, pin)
+	g, err := openInputGPIO(bank, port, pin)
+	if err != nil {
+		return nil, err
+	}
+	time.Sleep(pullUpSettleTime)
+	return g, nil
 }
 
 func readDIP(g *gpio.GPIO) uint8 {
